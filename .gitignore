@@ -1,0 +1,4 @@
+__pycache__/
+docs/plans/
+.DS_Store
+*.egg-info/
