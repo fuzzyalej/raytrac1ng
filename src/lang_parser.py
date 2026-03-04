@@ -337,7 +337,9 @@ class Parser:
         right = self._expr()
         # Only compare numbers
         if not (isinstance(left, (int, float)) and isinstance(right, (int, float))):
-            raise ParseError("comparison only valid on numbers, not vec3")
+            raise ParseError(
+                f"comparison only valid on numbers, got {type(left).__name__!r} and {type(right).__name__!r}"
+            )
         if op == TT.EQEQ: return left == right
         if op == TT.NEQ:  return left != right
         if op == TT.LT:   return left <  right
@@ -463,10 +465,15 @@ class _ProgramParser(Parser):
             self._advance()
             mat = self._material_block()
             self._env[name] = mat
-        else:
-            val = self._expr()
-            self._env[name] = val
-        return []
+            return []
+
+        # let x = <expr>
+        val = self._expr()
+        self._env[name] = val
+        # Flush any items emitted by closure calls during expression evaluation
+        emitted = list(self._pending_items)
+        self._pending_items.clear()
+        return emitted
 
     def _material_block(self) -> dict:
         """Parse material { ... } and return a dict of material props."""
@@ -590,11 +597,6 @@ class _ProgramParser(Parser):
             else:
                 val = self._expr()
                 props[key] = val
-                # collect any scene items emitted during expression evaluation
-                if self._pending_items:
-                    # these are orphan items from closure calls in expressions;
-                    # they will be collected by the caller
-                    pass
 
         self._expect(TT.RBRACE)
 
@@ -617,7 +619,10 @@ class _ProgramParser(Parser):
                 f"function expects {len(closure.params)} argument(s), got {len(args)}"
             )
         child_env = dict(closure.captured_env)
-        child_env.update(self._env)          # pick up any new bindings since definition
+        # Make new bindings (defined after this closure) visible, but don't overwrite captures
+        for k, v in self._env.items():
+            if k not in closure.captured_env:
+                child_env[k] = v
         for param, arg in zip(closure.params, args):
             child_env[param] = arg
         sub = _FunctionParser(
@@ -666,7 +671,9 @@ class _ProgramParser(Parser):
         # Closure call in expression context
         if (tok is not None and tok.type == TT.IDENT):
             name = tok.value
-            val = self._env.get(name) or BUILTINS.get(name)
+            val = self._env.get(name)
+            if val is None:
+                val = BUILTINS.get(name)
             if isinstance(val, Closure):
                 # peek ahead for (
                 nxt = self._tokens[self._pos + 1] if self._pos + 1 < len(self._tokens) else None
@@ -682,6 +689,10 @@ class _ProgramParser(Parser):
                     self._expect(TT.RPAREN)
                     emitted, return_val = self._call_closure(val, args)
                     self._pending_items.extend(emitted)
+                    if return_val is None:
+                        raise ParseError(
+                            f"function {name!r} used as an expression but its body does not return a value"
+                        )
                     return return_val
         # fall through to base class
         return super()._primary()

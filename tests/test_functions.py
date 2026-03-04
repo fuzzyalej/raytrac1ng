@@ -223,20 +223,56 @@ def test_if_in_fn_emits_shapes():
 # ── Error cases ────────────────────────────────────────────────────────────
 
 def test_undefined_function_raises():
-    with pytest.raises(ParseError):
+    with pytest.raises(ParseError, match="undefined"):
         parse_source("sphere { center (0,1,0)  radius undefined_fn(1)  color (1,1,1) }")
 
 def test_wrong_arg_count_raises():
-    with pytest.raises(ParseError):
+    with pytest.raises(ParseError, match="expects"):
         parse_source("""
         let f = fn(a, b) { a + b }
         sphere { center (0,1,0)  radius f(1.0)  color (1,1,1) }
         """)
 
 def test_vec3_comparison_raises():
-    with pytest.raises(ParseError):
+    with pytest.raises(ParseError, match="comparison"):
         parse_source("""
         if (1,0,0) == (1,0,0) {
           sphere { center (0,1,0)  radius 1.0  color (1,1,1) }
         }
         """)
+
+def test_fn_with_no_return_value_raises_when_used_as_expr():
+    """Function that emits a shape but returns no value raises ParseError when used as expression."""
+    with pytest.raises(ParseError, match="does not return a value"):
+        parse_source("""
+        let f = fn(x) {
+          sphere { center (x, 0, 0)  radius 0.3  color (1,0,0) }
+        }
+        sphere { center (0,1,0)  radius f(1.0)  color (1,1,1) }
+        """)
+
+def test_fn_emits_items_when_called_in_let():
+    """Scene items emitted by a closure called in a let binding should not be discarded."""
+    src = """
+    let f = fn(x) {
+      sphere { center (x, 0, 0)  radius 0.3  color (1,0,0) }
+      x * 2
+    }
+    let y = f(3.0)
+    sphere { center (0,1,0)  radius y  color (1,1,1) }
+    """
+    items = parse_source(src)
+    assert len(items) == 2
+    assert items[0].center == (3.0, 0.0, 0.0)
+    assert items[1].radius == pytest.approx(6.0)
+
+def test_closure_captures_by_value_not_late_binding():
+    """Variables captured at definition time should not be overwritten by later rebinding."""
+    src = """
+    let x = 1.0
+    let f = fn() { x }
+    let x = 2.0
+    sphere { center (0,1,0)  radius f()  color (1,1,1) }
+    """
+    items = parse_source(src)
+    assert items[0].radius == pytest.approx(1.0)
