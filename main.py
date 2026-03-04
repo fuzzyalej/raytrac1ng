@@ -19,7 +19,6 @@ os.environ["PYTHONPATH"] = (_SRC + os.pathsep + _old_pp) if _old_pp else _SRC
 
 import argparse
 
-from parser import parse_scene
 from renderer import render
 
 try:
@@ -47,6 +46,10 @@ def main():
         ap.error("--jobs must be 0 (all cores) or a positive integer")
 
     print(f"Loading scene: {args.scene}")
+    if args.scene.endswith(".pow"):
+        from new_parser import parse_scene
+    else:
+        from parser import parse_scene
     scene = parse_scene(args.scene)
 
     obj_count = len(scene.objects)

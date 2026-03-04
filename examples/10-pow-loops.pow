@@ -1,0 +1,20 @@
+// Example: POW scene with loops
+// Renders a row of glass spheres over a gray ground plane
+
+import "materials/standard.pow"
+
+camera { location (0, 3, -9)  look_at (0, 1, 0)  fov 55 }
+light  { position (4, 8, -4)  radius 1.5  samples 24 }
+
+plane  { normal (0,1,0)  offset 0  material matte_gray }
+
+let count   = 7
+let spacing = 2.0
+
+for i in range(count) {
+  sphere {
+    center ((i - count / 2) * spacing, 1.0, 0)
+    radius 0.8
+    material glass
+  }
+}

@@ -1,0 +1,26 @@
+// Example: POW scene with materials and all shape types
+// Demonstrates material reuse and all six geometric primitives
+
+import "materials/standard.pow"
+
+let red_glass = material { color (1.0, 0.2, 0.2)  opacity 0.0  ior 1.5 }
+
+camera { location (0, 3, -10)  look_at (0, 1, 0)  fov 60 }
+light  { position (5, 10, -5)  radius 1.5  samples 24 }
+
+plane  { normal (0,1,0)  offset 0  material matte_white }
+
+// Sphere
+sphere { center (-4, 1, 0)  radius 1.0  material red_glass }
+
+// Box
+box { min (-1, 0, -0.5)  max (1, 2, 0.5)  material mirror }
+
+// Cylinder
+cylinder { bottom (3, 0, 0)  top (3, 2, 0)  radius 0.5  material glass }
+
+// Cone
+cone { bottom (5.5, 0, 0)  top (5.5, 2, 0)  bottom_radius 0.6  top_radius 0.0  material matte_white }
+
+// Torus
+torus { center (0, 0.5, 3)  axis (0,1,0)  major_radius 1.2  minor_radius 0.35  material glass }
