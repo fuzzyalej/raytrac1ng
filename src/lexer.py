@@ -64,6 +64,8 @@ _SINGLE_CHAR = {
     '*': TT.STAR,
     '/': TT.SLASH,
 }
+# Note: '=' is intentionally excluded — handled inline below so that '=='
+# (EQEQ) is matched first before a bare '=' (EQUALS).
 
 
 def tokenise(src: str) -> list[Token]:

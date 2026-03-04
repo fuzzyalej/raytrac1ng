@@ -109,3 +109,8 @@ def test_equals_still_works():
 def test_comparison_expression_tokens():
     toks = tokenise("a == b")
     assert toks[1].type == TT.EQEQ
+
+
+def test_bang_alone_raises():
+    with pytest.raises(LexError):
+        tokenise("!")
