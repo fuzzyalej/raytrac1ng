@@ -18,7 +18,8 @@ It supports Lambertian diffuse shading with soft shadows from sphere area lights
 ### Rendering Pipeline
 
 ```
-.pov file → Parser → Scene (camera, lights, objects)
+.pow file → lang_parser → Scene (camera, lights, objects)
+.pov file → parser      ↗
                           ↓
                       Renderer
                           ↓
@@ -154,13 +155,16 @@ All primitives use a `t_min` (default 0.001) to avoid self-intersection artifact
 ```
 raytrac1ng/
 ├── src/
-│   ├── vector.py     Vec3 — 3D math
-│   ├── color.py      Color — RGB arithmetic + named palette
-│   ├── ray.py        Ray types (VisionRay, ReflectionRay, RefractionRay)
-│   ├── shapes.py     HitRecord + all primitives (Sphere, Plane, Box, Cylinder, Cone, Torus)
-│   ├── scene.py      Camera, Light, Scene container
-│   ├── renderer.py   Core render loop and shading
-│   └── parser.py     .pov scene file parser
+│   ├── vector.py       Vec3 — 3D math
+│   ├── color.py        Color — RGB arithmetic + named palette
+│   ├── ray.py          Ray types (VisionRay, ReflectionRay, RefractionRay)
+│   ├── shapes.py       HitRecord + all primitives (Sphere, Plane, Box, Cylinder, Cone, Torus)
+│   ├── scene.py        Camera, Light, Scene container
+│   ├── renderer.py     Core render loop and shading
+│   ├── parser.py       .pov scene file parser (legacy)
+│   ├── lexer.py        POW language lexer
+│   ├── lang_parser.py  POW recursive-descent parser + evaluator
+│   └── new_parser.py   POW→Scene adapter
 ├── tests/
 │   ├── conftest.py   Adds src/ to sys.path for pytest
 │   └── test_*.py
@@ -172,9 +176,15 @@ raytrac1ng/
 │   ├── 05-two-lights.pov / .png
 │   ├── 06-reflections.pov / .png
 │   ├── 07-refractions.pov / .png
-│   └── 08-shapes.pov / .png
+│   ├── 08-shapes.pov / .png
+│   ├── 09-mecha.pov / .png
+│   ├── 10-pow-loops.pow / .png   (POW: variables + for loops)
+│   ├── 11-pow-materials.pow / .png (POW: materials + all shapes)
+│   └── materials/
+│       └── standard.pow          Shared material library
 ├── docs/
-│   └── plans/        Implementation plans
+│   ├── pow-reference.md  POW language reference manual
+│   └── plans/            Implementation plans
 ├── main.py           CLI entry point
 └── README.md
 ```
@@ -238,7 +248,36 @@ Parses CLI arguments, calls the parser and renderer, and saves the result as a P
 
 ---
 
-## Scene File Format
+## POW Scene Language
+
+`.pow` is the new scene language — a proper scripting language with variables, expressions, loops, imports, and reusable materials. See **[docs/pow-reference.md](docs/pow-reference.md)** for the full reference.
+
+Quick example:
+
+```
+import "materials/standard.pow"
+
+let count = 5
+camera { location (0, 3, -9)  look_at (0, 1, 0)  fov 55 }
+light  { position (4, 8, -4)  radius 1.5  samples 24 }
+plane  { normal (0,1,0)  offset 0  material matte_gray }
+
+for i in range(count) {
+  sphere {
+    center (i * 2.0, 1.0, 0)
+    radius 0.8
+    material glass
+  }
+}
+```
+
+```bash
+python3 main.py examples/10-pow-loops.pow -W 800 -H 600 -o render.png
+```
+
+---
+
+## Legacy Scene File Format (.pov)
 
 The `.pov` format uses a block-based syntax with C-style braces. Vectors use angle-bracket notation `<x, y, z>`. Single-line comments with `//` are supported.
 
@@ -459,6 +498,20 @@ python3 main.py examples/01-basic.pov -W 1024 -H 768 -o render.png
 ---
 
 ## Changelog
+
+### v1.0 — POW Scene Language (2026-03-04)
+
+- New `.pow` scene format — a proper scripting language replacing the regex-based `.pov` parser
+- **Lexer** (`src/lexer.py`): tokenises `.pow` source into typed tokens
+- **Recursive-descent parser** (`src/lang_parser.py`): full expression parser with operator precedence, vec3 arithmetic, built-in math functions (`sin`, `cos`, `abs`, `pi`)
+- **Variables:** `let name = expr` — eliminates repeated magic numbers
+- **Loops:** `for i in range(n)`, `for i in range(start, stop)`, `for x in [list]` — generates repeated geometry programmatically
+- **Materials:** `let m = material { color (...) opacity N reflect N ior N }` — reusable material definitions referenced by name in shape blocks
+- **Imports:** `import "path/to/file.pow"` — share material libraries across scenes; `examples/materials/standard.pow` provided
+- **All 6 shapes** supported in `.pow`: sphere, plane, box, cylinder, cone, torus — same property names as `.pov`
+- **Backwards compatible:** `.pov` files continue to work unchanged; format is selected by file extension
+- **Reference manual:** `docs/pow-reference.md` — complete language reference with all blocks, expressions, and migration guide
+- Example scenes: `examples/10-pow-loops.pow`, `examples/11-pow-materials.pow`
 
 ### v0.9 — Multiprocessing (2026-03-04)
 
