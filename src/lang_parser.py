@@ -49,6 +49,19 @@ class SceneLight:
 _MAT_DEFAULTS = dict(color=(1.0, 1.0, 1.0), opacity=1.0, reflect=0.0, ior=1.0)
 
 
+# ---------------------------------------------------------------------------
+# Closure (user-defined function)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Closure:
+    params: list
+    body_tokens: list
+    captured_env: dict
+    base_path: str
+    imported: set
+
+
 @dataclass
 class SceneSphere:
     center:  tuple
@@ -132,6 +145,13 @@ def _vec_sub(a, b):
 
 def _is_vec(v):
     return isinstance(v, tuple) and len(v) == 3
+
+
+# ---------------------------------------------------------------------------
+# Comparison operator set
+# ---------------------------------------------------------------------------
+
+_COMP_OPS = {TT.EQEQ, TT.NEQ, TT.LT, TT.GT, TT.LTE, TT.GTE}
 
 
 # ---------------------------------------------------------------------------
@@ -307,6 +327,24 @@ class Parser:
 
         raise ParseError(f"unexpected token {tok.value!r} at line {tok.line}")
 
+    def _compare(self):
+        """Parse comparison: expr COMPOP expr  ->  bool, or just expr."""
+        left = self._expr()
+        tok = self._peek()
+        if tok is None or tok.type not in _COMP_OPS:
+            return left
+        op = self._advance().type
+        right = self._expr()
+        # Only compare numbers
+        if not (isinstance(left, (int, float)) and isinstance(right, (int, float))):
+            raise ParseError("comparison only valid on numbers, not vec3")
+        if op == TT.EQEQ: return left == right
+        if op == TT.NEQ:  return left != right
+        if op == TT.LT:   return left <  right
+        if op == TT.GT:   return left >  right
+        if op == TT.LTE:  return left <= right
+        if op == TT.GTE:  return left >= right
+
 
 # ---------------------------------------------------------------------------
 # Statement parser + evaluator
@@ -318,6 +356,8 @@ _BLOCK_KEYWORDS = {
 }
 
 _MATERIAL_FIELDS = {"color", "opacity", "reflect", "ior"}
+
+_STMT_KEYWORDS = {"let", "for", "import", "if"} | _BLOCK_KEYWORDS
 
 
 def _child_env(parent: dict) -> dict:
@@ -333,6 +373,7 @@ class _ProgramParser(Parser):
         super().__init__(tokens, env)
         self._base_path = base_path
         self._imported = imported if imported is not None else set()
+        self._pending_items: list = []
 
     def parse_program(self) -> list:
         items = []
@@ -357,10 +398,34 @@ class _ProgramParser(Parser):
         if tok.type == TT.IDENT and tok.value == "for":
             return self._for_stmt()
 
+        # if statement
+        if tok.type == TT.IDENT and tok.value == "if":
+            items, _ = self._if_stmt()   # discard return value at top level
+            return items
+
         # block statement (camera, sphere, etc.)
         if tok.type == TT.IDENT and tok.value in _BLOCK_KEYWORDS:
             item = self._block_stmt(self._env)
             return [item] if item is not None else []
+
+        # Closure call statement at top level: IDENT(args)
+        if tok.type == TT.IDENT:
+            name = tok.value
+            val = self._env.get(name)
+            if isinstance(val, Closure):
+                nxt = self._tokens[self._pos + 1] if self._pos + 1 < len(self._tokens) else None
+                if nxt is not None and nxt.type == TT.LPAREN:
+                    self._advance()  # consume IDENT
+                    self._advance()  # consume (
+                    args = []
+                    if not self._check(TT.RPAREN):
+                        args.append(self._expr())
+                        while self._check(TT.COMMA):
+                            self._advance()
+                            args.append(self._expr())
+                    self._expect(TT.RPAREN)
+                    emitted, _ = self._call_closure(val, args)
+                    return emitted
 
         raise ParseError(f"unexpected token {tok.value!r} at line {tok.line}")
 
@@ -369,6 +434,29 @@ class _ProgramParser(Parser):
         name_tok = self._expect(TT.IDENT)
         name = name_tok.value
         self._expect(TT.EQUALS)
+
+        # let x = fn(...) { ... }
+        if self._match_ident("fn"):
+            self._advance()  # consume 'fn'
+            self._expect(TT.LPAREN)
+            params = []
+            if not self._check(TT.RPAREN):
+                params.append(self._expect(TT.IDENT).value)
+                while self._check(TT.COMMA):
+                    self._advance()
+                    params.append(self._expect(TT.IDENT).value)
+            self._expect(TT.RPAREN)
+            self._expect(TT.LBRACE)
+            body_tokens = self._collect_block_tokens()
+            closure = Closure(
+                params=params,
+                body_tokens=body_tokens,
+                captured_env=dict(self._env),
+                base_path=self._base_path,
+                imported=self._imported,
+            )
+            self._env[name] = closure
+            return []
 
         # let x = material { ... }
         if self._match_ident("material"):
@@ -448,8 +536,6 @@ class _ProgramParser(Parser):
 
         # body
         self._expect(TT.LBRACE)
-        body_tokens_start = self._pos
-        # collect body tokens up to matching }
         body_tokens = self._collect_block_tokens()
 
         items = []
@@ -504,6 +590,11 @@ class _ProgramParser(Parser):
             else:
                 val = self._expr()
                 props[key] = val
+                # collect any scene items emitted during expression evaluation
+                if self._pending_items:
+                    # these are orphan items from closure calls in expressions;
+                    # they will be collected by the caller
+                    pass
 
         self._expect(TT.RBRACE)
 
@@ -519,6 +610,157 @@ class _ProgramParser(Parser):
         except KeyError as e:
             raise ParseError(f"missing required field {e} in {kind} block")
 
+    def _call_closure(self, closure: Closure, args: list) -> tuple:
+        """Execute a closure. Returns (scene_items, return_value)."""
+        if len(args) != len(closure.params):
+            raise ParseError(
+                f"function expects {len(closure.params)} argument(s), got {len(args)}"
+            )
+        child_env = dict(closure.captured_env)
+        child_env.update(self._env)          # pick up any new bindings since definition
+        for param, arg in zip(closure.params, args):
+            child_env[param] = arg
+        sub = _FunctionParser(
+            closure.body_tokens, child_env,
+            closure.base_path, closure.imported
+        )
+        return sub.parse_function_body()
+
+    def _if_stmt(self) -> tuple:
+        """Parse if/else-if/else. Returns (scene_items, last_value)."""
+        self._advance()  # consume 'if'
+        condition = self._compare()
+        self._expect(TT.LBRACE)
+        body_tokens = self._collect_block_tokens()
+
+        branches = [(condition, body_tokens)]
+
+        # else if / else
+        while self._match_ident("else"):
+            self._advance()  # consume 'else'
+            if self._match_ident("if"):
+                self._advance()  # consume 'if'
+                cond = self._compare()
+                self._expect(TT.LBRACE)
+                btoks = self._collect_block_tokens()
+                branches.append((cond, btoks))
+            else:
+                # plain else
+                self._expect(TT.LBRACE)
+                btoks = self._collect_block_tokens()
+                branches.append((True, btoks))
+                break
+
+        # evaluate the first true branch
+        for cond, btoks in branches:
+            if cond:
+                sub = _FunctionParser(btoks, _child_env(self._env),
+                                      self._base_path, self._imported)
+                items, val = sub.parse_function_body()
+                return items, val
+
+        return [], None
+
+    def _primary(self):
+        tok = self._peek()
+        # Closure call in expression context
+        if (tok is not None and tok.type == TT.IDENT):
+            name = tok.value
+            val = self._env.get(name) or BUILTINS.get(name)
+            if isinstance(val, Closure):
+                # peek ahead for (
+                nxt = self._tokens[self._pos + 1] if self._pos + 1 < len(self._tokens) else None
+                if nxt is not None and nxt.type == TT.LPAREN:
+                    self._advance()  # consume IDENT
+                    self._advance()  # consume (
+                    args = []
+                    if not self._check(TT.RPAREN):
+                        args.append(self._expr())
+                        while self._check(TT.COMMA):
+                            self._advance()
+                            args.append(self._expr())
+                    self._expect(TT.RPAREN)
+                    emitted, return_val = self._call_closure(val, args)
+                    self._pending_items.extend(emitted)
+                    return return_val
+        # fall through to base class
+        return super()._primary()
+
+
+# ---------------------------------------------------------------------------
+# _FunctionParser: parses a function body
+# ---------------------------------------------------------------------------
+
+class _FunctionParser(_ProgramParser):
+    """Parses a function body; tracks the last expression as a return value."""
+
+    def parse_function_body(self) -> tuple:
+        """Returns (scene_items: list, return_value: Any)."""
+        items = []
+        last_value = None
+        while not self._at_end():
+            tok = self._peek()
+            if tok is None:
+                break
+
+            # Known statement keyword or block keyword
+            if tok.type == TT.IDENT and tok.value in _STMT_KEYWORDS:
+                if tok.value == "if":
+                    stmt_items, val = self._if_stmt()
+                    items.extend(stmt_items)
+                    items.extend(self._pending_items)
+                    self._pending_items.clear()
+                    last_value = val
+                else:
+                    stmt_items = self._statement()
+                    items.extend(stmt_items)
+                    items.extend(self._pending_items)
+                    self._pending_items.clear()
+                    last_value = None
+                continue
+
+            # Closure call statement: IDENT ( where IDENT resolves to a Closure
+            if tok.type == TT.IDENT and self._resolves_to_closure(tok.value):
+                stmt_items, val = self._closure_call_stmt()
+                items.extend(stmt_items)
+                last_value = val
+                continue
+
+            # Bare expression = return value (must be last)
+            val = self._expr()
+            items.extend(self._pending_items)
+            self._pending_items.clear()
+            last_value = val
+            if not self._at_end():
+                raise ParseError(
+                    "unexpected token after return expression in function body"
+                )
+
+        return items, last_value
+
+    def _resolves_to_closure(self, name: str) -> bool:
+        val = self._env.get(name)
+        nxt = self._tokens[self._pos + 1] if self._pos + 1 < len(self._tokens) else None
+        return isinstance(val, Closure) and nxt is not None and nxt.type == TT.LPAREN
+
+    def _closure_call_stmt(self) -> tuple:
+        """Parse name(args) where name is a Closure. Returns (items, return_value)."""
+        name = self._advance().value   # IDENT
+        self._expect(TT.LPAREN)
+        args = []
+        if not self._check(TT.RPAREN):
+            args.append(self._expr())
+            while self._check(TT.COMMA):
+                self._advance()
+                args.append(self._expr())
+        self._expect(TT.RPAREN)
+        closure = self._env[name]
+        return self._call_closure(closure, args)
+
+
+# ---------------------------------------------------------------------------
+# _build_scene_item helper
+# ---------------------------------------------------------------------------
 
 def _build_scene_item(kind: str, props: dict, mat: dict):
     """Convert raw props dict + resolved material into a scene item dataclass."""
