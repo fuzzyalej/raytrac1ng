@@ -1,0 +1,36 @@
+// Example: POW functions and conditionals
+// Generates a ring of spheres using a user-defined function,
+// with size varying by index via conditionals.
+
+import "materials/standard.pow"
+
+let red_glass = material { color (1.0, 0.2, 0.2)  opacity 0.0  ior 1.5 }
+
+camera { location (0, 5, -10)  look_at (0, 1, 0)  fov 55 }
+light  { position (4, 8, -4)   radius 1.5  samples 24 }
+plane  { normal (0,1,0)  offset 0  material matte_gray }
+
+// Function: place one sphere in a ring, size varies by index
+let ring_sphere = fn(i, count, radius) {
+  let angle = i * 2 * pi / count
+  let pos   = (cos(angle) * radius, 1.0, sin(angle) * radius)
+  if i == 0 {
+    sphere { center pos  radius 0.9  material glass }
+  } else if i < 3 {
+    sphere { center pos  radius 0.6  material glass }
+  } else {
+    sphere { center pos  radius 0.4  material glass }
+  }
+}
+
+// Function: place a column at position
+let column = fn(x, z) {
+  cylinder { bottom (x, 0, z)  top (x, 2, z)  radius 0.2  material mirror }
+  sphere   { center (x, 2.2, z)  radius 0.2  material red_glass }
+}
+
+let count = 8
+for i in range(count) { ring_sphere(i, count, 3.5) }
+
+column(-5.0, 0.0)
+column( 5.0, 0.0)
