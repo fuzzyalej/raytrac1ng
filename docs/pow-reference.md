@@ -365,3 +365,84 @@ python3 main.py examples/10-pow-loops.pow -W 800 -H 600 -o render.png --aa 4 --j
 ```bash
 python3 main.py examples/01-basic.pov -W 800 -H 600 -o render.png
 ```
+
+---
+
+## Functions
+
+```
+let name = fn(param1, param2, ...) {
+  // body: let bindings, loops, if/else, scene blocks, other fn calls
+  // last expression = return value (or None if body ends with a scene block)
+}
+```
+
+### Value-returning function
+
+```
+let circle_pos = fn(i, count, r) {
+  let angle = i * 2 * pi / count
+  (cos(angle) * r, 0, sin(angle) * r)
+}
+sphere { center circle_pos(3, 8, 2.0)  radius 0.5  color (1,1,1) }
+```
+
+### Scene-emitting function
+
+```
+let ring = fn(i, count, radius) {
+  let angle = i * 2 * pi / count
+  let pos   = (cos(angle) * radius, 0, sin(angle) * radius)
+  sphere { center pos  radius 0.3  color (1, 0.3, 0.3) }
+}
+for i in range(8) { ring(i, 8, 3.0) }
+```
+
+Functions can emit any scene objects (sphere, box, cylinder, etc.) and can call other previously-defined functions. Recursion is not supported.
+
+### Calling
+
+- **As a statement** (to emit scene objects): `name(arg1, arg2)`
+- **As an expression** (to use return value): `sphere { radius name(x)  ... }`
+
+### Scope
+
+Functions capture the environment at definition time. Variables defined after the function definition are not visible inside the function body. Parameters shadow outer variables of the same name.
+
+---
+
+## Conditionals
+
+```
+if <condition> {
+  // body
+} else if <condition> {
+  // body
+} else {
+  // body
+}
+```
+
+Conditions use comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`. Only number comparisons are supported — comparing vec3 values raises an error. No `and`/`or` operators; nest `if` statements instead.
+
+### As a statement
+
+```
+let x = 2.0
+if x > 5 {
+  sphere { center (0,1,0)  radius 3.0  color (1,0,0) }
+} else if x > 1 {
+  sphere { center (0,1,0)  radius 2.0  color (0,1,0) }
+} else {
+  sphere { center (0,1,0)  radius 1.0  color (0,0,1) }
+}
+```
+
+### As a return expression in a function
+
+```
+let bigger = fn(a, b) {
+  if a > b { a } else { b }
+}
+sphere { center (0,1,0)  radius bigger(1.5, 0.8)  color (1,1,1) }
+```

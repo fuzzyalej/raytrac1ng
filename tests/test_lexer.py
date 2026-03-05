@@ -75,3 +75,42 @@ def test_minus_no_space_is_negative():
     assert len(toks) == 1
     assert toks[0].type == TT.NUMBER
     assert toks[0].value == -1.5
+
+def test_eqeq():
+    toks = tokenise("==")
+    assert toks[0].type == TT.EQEQ
+
+def test_neq():
+    toks = tokenise("!=")
+    assert toks[0].type == TT.NEQ
+
+def test_lt():
+    toks = tokenise("<")
+    assert toks[0].type == TT.LT
+
+def test_gt():
+    toks = tokenise(">")
+    assert toks[0].type == TT.GT
+
+def test_lte():
+    toks = tokenise("<=")
+    assert toks[0].type == TT.LTE
+
+def test_gte():
+    toks = tokenise(">=")
+    assert toks[0].type == TT.GTE
+
+def test_equals_still_works():
+    toks = tokenise("let x = 1")
+    types = [t.type for t in toks]
+    assert TT.EQUALS in types
+    assert TT.EQEQ not in types
+
+def test_comparison_expression_tokens():
+    toks = tokenise("a == b")
+    assert toks[1].type == TT.EQEQ
+
+
+def test_bang_alone_raises():
+    with pytest.raises(LexError):
+        tokenise("!")

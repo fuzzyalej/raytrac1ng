@@ -24,6 +24,14 @@ class TT(Enum):
     STAR     = auto()   # *
     SLASH    = auto()   # /
 
+    # Comparison operators
+    EQEQ     = auto()   # ==
+    NEQ      = auto()   # !=
+    LT       = auto()   # <
+    GT       = auto()   # >
+    LTE      = auto()   # <=
+    GTE      = auto()   # >=
+
     EOF      = auto()
 
 
@@ -51,12 +59,13 @@ _SINGLE_CHAR = {
     '[': TT.LBRACKET,
     ']': TT.RBRACKET,
     ',': TT.COMMA,
-    '=': TT.EQUALS,
     '+': TT.PLUS,
     '-': TT.MINUS,
     '*': TT.STAR,
     '/': TT.SLASH,
 }
+# Note: '=' is intentionally excluded — handled inline below so that '=='
+# (EQEQ) is matched first before a bare '=' (EQUALS).
 
 
 def tokenise(src: str) -> list[Token]:
@@ -128,6 +137,36 @@ def tokenise(src: str) -> list[Token]:
             while i < n and (src[i].isalnum() or src[i] == '_'):
                 i += 1
             tokens.append(Token(TT.IDENT, src[start:i], line))
+            continue
+
+        # Multi-char and comparison operators (must come before single-char fallback)
+        if c == '=' and i + 1 < n and src[i + 1] == '=':
+            tokens.append(Token(TT.EQEQ, '==', line))
+            i += 2
+            continue
+        if c == '!' and i + 1 < n and src[i + 1] == '=':
+            tokens.append(Token(TT.NEQ, '!=', line))
+            i += 2
+            continue
+        if c == '<' and i + 1 < n and src[i + 1] == '=':
+            tokens.append(Token(TT.LTE, '<=', line))
+            i += 2
+            continue
+        if c == '>' and i + 1 < n and src[i + 1] == '=':
+            tokens.append(Token(TT.GTE, '>=', line))
+            i += 2
+            continue
+        if c == '<':
+            tokens.append(Token(TT.LT, '<', line))
+            i += 1
+            continue
+        if c == '>':
+            tokens.append(Token(TT.GT, '>', line))
+            i += 1
+            continue
+        if c == '=':
+            tokens.append(Token(TT.EQUALS, '=', line))
+            i += 1
             continue
 
         # Single-char tokens

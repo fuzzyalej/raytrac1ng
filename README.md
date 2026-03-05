@@ -499,6 +499,15 @@ python3 main.py examples/01-basic.pov -W 1024 -H 768 -o render.png
 
 ## Changelog
 
+### v1.1 — Functions & Conditionals (2026-03-04)
+
+- User-defined functions: `let f = fn(a, b) { ... }` with block bodies
+- Functions can return values (last expression) and/or emit scene objects
+- Functions can call other previously-defined functions
+- `if`/`else if`/`else` conditionals with comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`)
+- `if` usable as return expression inside function bodies
+- Example scene: `examples/12-pow-functions.pow`
+
 ### v1.0 — POW Scene Language (2026-03-04)
 
 - New `.pow` scene format — a proper scripting language replacing the regex-based `.pov` parser
