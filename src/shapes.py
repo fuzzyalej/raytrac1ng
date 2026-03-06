@@ -57,6 +57,11 @@ class Sphere:
         normal = (point - self.center) / self.radius
         return HitRecord(t=t, point=point, normal=normal)
 
+    def bounding_box(self):
+        from bvh import AABB  # lazy import avoids shapes ↔ bvh circular dependency
+        r = Vec3(self.radius, self.radius, self.radius)
+        return AABB(self.center - r, self.center + r)
+
 
 class Plane:
     """Infinite plane defined by normal and offset from origin.
@@ -168,6 +173,10 @@ class Box:
         point  = ray.point_at(t)
         return HitRecord(t=t, point=point, normal=normal)
 
+    def bounding_box(self):
+        from bvh import AABB  # lazy import avoids shapes ↔ bvh circular dependency
+        return AABB(self.min_pt, self.max_pt)
+
 
 class Cylinder:
     """Capped cylinder defined by two endpoint centres and a radius.
@@ -249,6 +258,24 @@ class Cylinder:
         if best_normal is None:
             return None
         return HitRecord(t=best_t, point=ray.point_at(best_t), normal=best_normal)
+
+    def bounding_box(self):
+        from bvh import AABB  # lazy import avoids shapes ↔ bvh circular dependency
+        # Tight bounds: for a disk at centre c with axis D,
+        # the half-extent along world axis i is radius * sqrt(1 - D.i²).
+        # We union the two cap disks (bottom + top) to get the full cylinder AABB.
+        D = self.axis
+        ex = self.radius * math.sqrt(max(0.0, 1.0 - D.x * D.x))
+        ey = self.radius * math.sqrt(max(0.0, 1.0 - D.y * D.y))
+        ez = self.radius * math.sqrt(max(0.0, 1.0 - D.z * D.z))
+        return AABB(
+            Vec3(min(self.bottom.x, self.top.x) - ex,
+                 min(self.bottom.y, self.top.y) - ey,
+                 min(self.bottom.z, self.top.z) - ez),
+            Vec3(max(self.bottom.x, self.top.x) + ex,
+                 max(self.bottom.y, self.top.y) + ey,
+                 max(self.bottom.z, self.top.z) + ez),
+        )
 
 
 class Cone:
@@ -357,6 +384,24 @@ class Cone:
         if best_normal is None:
             return None
         return HitRecord(t=best_t, point=ray.point_at(best_t), normal=best_normal)
+
+    def bounding_box(self):
+        from bvh import AABB  # lazy import avoids shapes ↔ bvh circular dependency
+        # Conservative: use max of the two end radii.
+        # Tight per-axis: half-extent along world axis i is max_r * sqrt(1 - D.i²).
+        D = self.axis
+        max_r = max(self.bottom_radius, self.top_radius)
+        ex = max_r * math.sqrt(max(0.0, 1.0 - D.x * D.x))
+        ey = max_r * math.sqrt(max(0.0, 1.0 - D.y * D.y))
+        ez = max_r * math.sqrt(max(0.0, 1.0 - D.z * D.z))
+        return AABB(
+            Vec3(min(self.bottom.x, self.top.x) - ex,
+                 min(self.bottom.y, self.top.y) - ey,
+                 min(self.bottom.z, self.top.z) - ez),
+            Vec3(max(self.bottom.x, self.top.x) + ex,
+                 max(self.bottom.y, self.top.y) + ey,
+                 max(self.bottom.z, self.top.z) + ez),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -541,3 +586,9 @@ class Torus:
                 return HitRecord(t=t, point=p_world, normal=normal)
 
         return None
+
+    def bounding_box(self):
+        from bvh import AABB  # lazy import avoids shapes ↔ bvh circular dependency
+        extent = self.major_radius + self.minor_radius
+        r = Vec3(extent, extent, extent)
+        return AABB(self.center - r, self.center + r)

@@ -446,3 +446,11 @@ let bigger = fn(a, b) {
 }
 sphere { center (0,1,0)  radius bigger(1.5, 0.8)  color (1,1,1) }
 ```
+
+---
+
+## Performance
+
+BVH (Bounding Volume Hierarchy) acceleration is built automatically at render time — no scene changes needed. Scenes with many objects render significantly faster than with the previous linear scan.
+
+All bounded shapes (`sphere`, `box`, `cylinder`, `cone`, `torus`) participate in the BVH automatically. The `plane` shape is always tested separately since it is infinite.

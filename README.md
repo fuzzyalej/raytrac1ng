@@ -1,7 +1,22 @@
 # Mini Raytracer — Documentation
 
-**Version:** v0.9
-**Last updated:** 2026-03-04
+**Version:** v1.2
+**Last updated:** 2026-03-05
+
+---
+
+## Changelog
+
+### v1.2 — 2026-03-05
+- SAH BVH spatial acceleration; automatic for all scenes — no scene changes needed
+- All bounded shapes (`Sphere`, `Box`, `Cylinder`, `Cone`, `Torus`) participate in the BVH
+- `Plane` (infinite/unbounded) is always tested linearly outside the BVH
+
+### v1.1 — 2026-03-04
+- POW language: functions (`fn`), conditionals (`if`/`else if`/`else`)
+
+### v1.0 — 2026-03-03
+- POW scene language with variables, loops, materials, imports
 
 ---
 
@@ -160,6 +175,7 @@ raytrac1ng/
 │   ├── ray.py          Ray types (VisionRay, ReflectionRay, RefractionRay)
 │   ├── shapes.py       HitRecord + all primitives (Sphere, Plane, Box, Cylinder, Cone, Torus)
 │   ├── scene.py        Camera, Light, Scene container
+│   ├── bvh.py          SAH BVH spatial acceleration (AABB, BVHNode, BVH)
 │   ├── renderer.py     Core render loop and shading
 │   ├── parser.py       .pov scene file parser (legacy)
 │   ├── lexer.py        POW language lexer
@@ -482,7 +498,7 @@ python3 main.py examples/01-basic.pov -W 1024 -H 768 -o render.png
 
 - Six primitive types (sphere, plane, box, cylinder, cone, torus); no CSG
 - Pure Python (slow for large images / many shadow samples); parallel rendering via `--jobs N` mitigates this for CPU-bound scenes but incurs pickling overhead
-- No bounding volume hierarchy or spatial acceleration
+- Shadow rays use a linear scan rather than the BVH — area lights with many objects will be less accelerated than primary rays
 - Only sphere area lights — no disk or rectangular lights
 
 ---
@@ -490,10 +506,9 @@ python3 main.py examples/01-basic.pov -W 1024 -H 768 -o render.png
 ## Possible Next Steps
 
 - **Disk and rectangular area lights** — more physically accurate than sphere area lights for studio-style lighting setups (e.g., `disk { position ... normal ... radius ... }`)
-- **Bounding volume hierarchy** — spatial acceleration for scenes with many objects
 - **Mesh file loading (OBJ/PLY)** for complex geometry
-- **Better scripting language than old POV**
 - **GIF animations** - capacity of animating objects through space and output a gif/video
+- **Figure composition**
 
 ---
 
