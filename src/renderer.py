@@ -8,6 +8,8 @@ from ray import Ray, ReflectionRay, RefractionRay
 from scene import Scene
 from shapes import HitRecord
 from vector import Vec3
+from bvh import BVH
+from shapes import Plane
 
 MAX_DEPTH = 8  # maximum transparency recursion depth
 BG_COLOR = Color(0.05, 0.05, 0.08)  # very dark blue-gray background
@@ -81,6 +83,9 @@ def _shadow_factor(hit_point: Vec3, light, scene: Scene) -> float:
         light_dir = to_light / dist_to_light
         shadow_ray = Ray(hit_point + light_dir * bias, light_dir)
 
+        # NOTE: shadow rays use a linear scan rather than the BVH.
+        # For most scenes (point lights, moderate object counts) this is fast enough.
+        # Area lights with thousands of objects would benefit from BVH shadow traversal.
         # Walk all objects along the shadow ray up to the light
         light_factor = 1.0
         for obj in scene.objects:
@@ -112,19 +117,40 @@ def _shade(hit: HitRecord, obj_color: Color, scene: Scene) -> Color:
 
 
 def _find_hit(ray, scene: Scene):
-    """Return (closest_hit, closest_obj) or (None, None) if no intersection."""
-    closest_hit = None
-    closest_obj = None
-    closest_t = float('inf')
+    """Return (closest_hit, closest_obj) or (None, None) if no intersection.
 
-    for obj in scene.objects:
-        hit = obj.hit(ray, t_max=closest_t)
-        if hit and hit.t < closest_t:
-            closest_t = hit.t
-            closest_hit = hit
-            closest_obj = obj
+    Uses the BVH (stored in scene._bvh) for bounded shapes, and tests
+    infinite shapes (Planes) linearly. Falls back to a linear scan if the BVH
+    has not been set up (e.g. in unit tests that call _trace directly).
 
-    return closest_hit, closest_obj
+    _bvh and _unbounded are always set and cleared together by render(); they
+    are treated atomically — if _bvh is absent then _unbounded is also absent,
+    so the fallback linear scan covers all objects.
+    """
+    bvh = getattr(scene, '_bvh', None)
+    if bvh is None:
+        # Fallback: linear scan (used when render() has not been called,
+        # e.g. in unit tests that drive _trace directly).
+        closest_hit = None
+        closest_obj = None
+        closest_t   = float('inf')
+        for obj in scene.objects:
+            hit = obj.hit(ray, t_max=closest_t)
+            if hit and hit.t < closest_t:
+                closest_t   = hit.t
+                closest_hit = hit
+                closest_obj = obj
+        return closest_hit, closest_obj
+
+    # BVH path: _bvh and _unbounded are always set together by render()
+    unbounded = scene._unbounded
+    hit, obj = bvh.hit(ray, 0.001, float('inf'))
+    t_max = hit.t if hit else float('inf')
+    for plane in unbounded:
+        plane_hit = plane.hit(ray, t_max=t_max)
+        if plane_hit:
+            hit, obj, t_max = plane_hit, plane, plane_hit.t
+    return hit, obj
 
 
 def _trace(ray, scene: Scene, depth: int) -> Color:
@@ -238,31 +264,44 @@ def render(scene: Scene, width: int, height: int,
     """
     if workers < 0:
         raise ValueError(f"workers must be >= 0, got {workers}")
-    if workers <= 1:
-        # ---- Single-process path (unchanged behaviour) ----------------------
-        pixels = []
-        total_pixels = width * height
-        for y in range(height):
-            if y % 50 == 0:
-                pct = (y * width) / total_pixels * 100
-                print(f"  Rendering… {pct:5.1f}%", flush=True)
-            pixels.extend(_render_row_chunk((scene, width, height, y, y + 1, aa_samples)))
-        print("  Rendering… 100.0%")
-        return pixels
 
-    # ---- Multi-process path -------------------------------------------------
-    chunk_rows = max(1, math.ceil(height / (workers * 4)))  # ~4 chunks per worker
-    chunks = [
-        (scene, width, height, y, min(y + chunk_rows, height), aa_samples)
-        for y in range(0, height, chunk_rows)
-    ]
-    total = len(chunks)
-    all_pixels: list[Color] = []
+    # Build BVH once; attach to scene so both single- and multi-process paths
+    # can access it via _find_hit. Cleaned up in the finally block below.
+    _bounded   = [o for o in scene.objects if not isinstance(o, Plane)]
+    _unbounded = [o for o in scene.objects if     isinstance(o, Plane)]
+    scene._bvh       = BVH.build(_bounded)
+    scene._unbounded = _unbounded
+    print(f"  BVH: {len(_bounded)} bounded + {len(_unbounded)} unbounded object(s)")
+    try:
+        if workers <= 1:
+            # ---- Single-process path (unchanged behaviour) ------------------
+            pixels = []
+            total_pixels = width * height
+            for y in range(height):
+                if y % 50 == 0:
+                    pct = (y * width) / total_pixels * 100
+                    print(f"  Rendering… {pct:5.1f}%", flush=True)
+                pixels.extend(_render_row_chunk((scene, width, height, y, y + 1, aa_samples)))
+            print("  Rendering… 100.0%")
+            return pixels
 
-    print(f"  Rendering… 0.0% (using {workers} workers)", flush=True)
-    with ProcessPoolExecutor(max_workers=workers) as executor:
-        for done, chunk_pixels in enumerate(executor.map(_render_row_chunk, chunks), 1):
-            all_pixels.extend(chunk_pixels)
-            print(f"  Rendering… {done / total * 100:5.1f}%", flush=True)
+        # ---- Multi-process path ---------------------------------------------
+        chunk_rows = max(1, math.ceil(height / (workers * 4)))  # ~4 chunks per worker
+        chunks = [
+            (scene, width, height, y, min(y + chunk_rows, height), aa_samples)
+            for y in range(0, height, chunk_rows)
+        ]
+        total = len(chunks)
+        all_pixels: list[Color] = []
 
-    return all_pixels
+        print(f"  Rendering… 0.0% (using {workers} workers)", flush=True)
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            for done, chunk_pixels in enumerate(executor.map(_render_row_chunk, chunks), 1):
+                all_pixels.extend(chunk_pixels)
+                print(f"  Rendering… {done / total * 100:5.1f}%", flush=True)
+
+        return all_pixels
+    finally:
+        # Always clean up so stale BVH is not left on the scene object
+        del scene._bvh
+        del scene._unbounded

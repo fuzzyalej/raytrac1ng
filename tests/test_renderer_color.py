@@ -87,3 +87,38 @@ def test_opaque_sphere_unchanged():
     assert abs(c1.r - c2.r) < 1e-6
     assert abs(c1.g - c2.g) < 1e-6
     assert abs(c1.b - c2.b) < 1e-6
+
+
+def test_render_empty_scene():
+    """A scene with no objects renders to background color."""
+    from scene import Scene, Camera, Light
+    from renderer import render
+    from color import Color
+    from vector import Vec3
+    camera = Camera(location=Vec3(0, 0, -5), look_at=Vec3(0, 0, 0), fov=60)
+    scene = Scene(camera=camera, lights=[], objects=[])
+    pixels = render(scene, 10, 10)
+    assert len(pixels) == 100
+    # All pixels should be background color (no objects to hit)
+    bg = Color(0.05, 0.05, 0.08)
+    for p in pixels:
+        assert abs(p.r - bg.r) < 1e-6 and abs(p.g - bg.g) < 1e-6 and abs(p.b - bg.b) < 1e-6
+
+
+def test_render_all_planes_scene():
+    """A scene with only Plane objects (no BVH-bounded objects) renders correctly."""
+    from scene import Scene, Camera, Light
+    from renderer import render
+    from shapes import Plane
+    from color import Color
+    from vector import Vec3
+    camera = Camera(location=Vec3(0, 5, -10), look_at=Vec3(0, 0, 0), fov=60)
+    light = Light(position=Vec3(5, 10, -5))
+    plane = Plane(Vec3(0, 1, 0), 0, Color(0.8, 0.8, 0.8))  # horizontal ground plane
+    scene = Scene(camera=camera, lights=[light], objects=[plane])
+    pixels = render(scene, 10, 10)
+    assert len(pixels) == 100
+    # At least some pixels should be the plane color (not background)
+    bg = Color(0.05, 0.05, 0.08)
+    non_bg = [p for p in pixels if abs(p.r - bg.r) > 0.01]
+    assert len(non_bg) > 0, "Expected some pixels to hit the plane"
