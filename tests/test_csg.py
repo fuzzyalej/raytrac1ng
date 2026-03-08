@@ -125,6 +125,23 @@ def test_cone_hit_intervals_miss():
     assert cone.hit_intervals(ray) == []
 
 
+def test_cylinder_hit_intervals_ray_inside():
+    cyl = Cylinder(Vec3(0, 0, 0), Vec3(0, 2, 0), 1.0)
+    ray = _ray(0, 1, 0, 1, 0, 0)    # starts at center, mid-height
+    ivs = cyl.hit_intervals(ray, t_min=1e-9)
+    assert len(ivs) == 1
+    assert ivs[0].t_enter < 0
+    assert abs(ivs[0].t_exit - 1.0) < 1e-4
+
+
+def test_cone_hit_intervals_ray_inside():
+    cone = Cone(Vec3(0, 0, 0), Vec3(0, 2, 0), 1.0, 1.0)
+    ray  = _ray(0, 1, 0, 1, 0, 0)   # starts at center, mid-height
+    ivs  = cone.hit_intervals(ray, t_min=1e-9)
+    assert len(ivs) == 1
+    assert ivs[0].t_enter < 0
+
+
 # ---------------------------------------------------------------------------
 # Task 6: Torus.hit_intervals()
 # ---------------------------------------------------------------------------
@@ -146,7 +163,10 @@ def test_torus_hit_intervals_one_interval():
     (ray origin at z=-5).
     """
     t = Torus(Vec3(0, 0, 0), Vec3(0, 1, 0), major_radius=2.0, minor_radius=0.5)
-    ray = _ray(2, 0, -5, 0, 0, 1)   # along +z, x=2: hits only the x>0 tube
+    # NOTE: A ray from (4,0,0) along (-1,0,0) passes through both the outer
+    # and inner torus walls, producing 2 intervals — not 1. This ray at
+    # x=major_radius threads through only the single x>0 tube, giving 1 interval.
+    ray = _ray(2, 0, -5, 0, 0, 1)
     ivs = t.hit_intervals(ray)
     assert len(ivs) == 1
     assert abs(ivs[0].t_enter - 3.5) < 1e-4   # tube enters at z=-1.5, t=(-5+5)+(-1.5+5)=3.5

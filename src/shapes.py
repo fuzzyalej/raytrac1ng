@@ -839,6 +839,7 @@ class Torus:
             n_x = _normal_at(t_x)
             if n_e is not None and n_x is not None:
                 intervals.append(HitInterval(t_e, t_x, n_e, n_x, self, self))
+            # else: degenerate root at torus axis (rho ≈ 0); interval silently dropped
             i += 2
 
         return intervals
