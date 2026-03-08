@@ -1058,3 +1058,106 @@ class CSGIntersection:
         # Guard against degenerate (non-overlapping) bounding boxes
         mn = Vec3(min(mn.x, mx.x), min(mn.y, mx.y), min(mn.z, mx.z))
         return AABB(mn, mx)
+
+
+# ---------------------------------------------------------------------------
+# CSGDifference
+# ---------------------------------------------------------------------------
+
+def _subtract_intervals(a_ivs: list, b_ivs: list) -> list:
+    """Subtract B intervals from A intervals: return regions in A but not in B.
+
+    At B's entry (cutting into A): that point becomes A-B exit, B normal flipped.
+    At B's exit  (still in A):    that point becomes A-B entry, B normal flipped.
+    """
+    result = []
+    for a in a_ivs:
+        # Start with A's interval, carve out each B segment
+        remaining = [a]
+        for b in b_ivs:
+            new_remaining = []
+            for seg in remaining:
+                # B entirely before or after this A segment → unchanged
+                if b.t_exit <= seg.t_enter or b.t_enter >= seg.t_exit:
+                    new_remaining.append(seg)
+                    continue
+                # Left fragment: [seg.t_enter, b.t_enter] if positive width
+                if b.t_enter > seg.t_enter:
+                    new_remaining.append(HitInterval(
+                        t_enter=seg.t_enter,
+                        t_exit=b.t_enter,
+                        enter_normal=seg.enter_normal,
+                        exit_normal=Vec3(-b.enter_normal.x,
+                                         -b.enter_normal.y,
+                                         -b.enter_normal.z),  # B entry flipped
+                        enter_obj=seg.enter_obj,
+                        exit_obj=b.enter_obj,
+                    ))
+                # Right fragment: [b.t_exit, seg.t_exit] if positive width
+                if b.t_exit < seg.t_exit:
+                    new_remaining.append(HitInterval(
+                        t_enter=b.t_exit,
+                        t_exit=seg.t_exit,
+                        enter_normal=Vec3(-b.exit_normal.x,
+                                          -b.exit_normal.y,
+                                          -b.exit_normal.z),  # B exit flipped
+                        exit_normal=seg.exit_normal,
+                        enter_obj=b.exit_obj,
+                        exit_obj=seg.exit_obj,
+                    ))
+            remaining = new_remaining
+        result.extend(remaining)
+
+    return sorted(result, key=lambda iv: iv.t_enter)
+
+
+class CSGDifference:
+    """Binary difference: first child minus second child (A - B).
+
+    Raises ValueError if anything other than exactly 2 positional args are given.
+    """
+
+    def __init__(self, left, right, _sentinel=None,
+                 color=None, opacity=None, reflect=None, ior=None):
+        if _sentinel is not None:
+            raise ValueError("CSGDifference is binary: supply exactly 2 children")
+        self.left    = left
+        self.right   = right
+        self.color   = color
+        self.opacity = opacity
+        self.reflect = reflect
+        self.ior     = ior
+
+    def _has_material(self) -> bool:
+        return any(v is not None for v in (self.color, self.opacity,
+                                           self.reflect, self.ior))
+
+    def _resolve_mat(self, child_obj):
+        if not self._has_material():
+            return child_obj
+        return _ResolvedMat(self, child_obj)
+
+    def hit_intervals(self, ray, t_min: float = 1e-9,
+                      t_max: float = float('inf')) -> list:
+        a_ivs = self.left.hit_intervals(ray, t_min, t_max)
+        b_ivs = self.right.hit_intervals(ray, t_min, t_max)
+        return _subtract_intervals(a_ivs, b_ivs)
+
+    def hit(self, ray, t_min: float = 0.001,
+            t_max: float = float('inf')):
+        for iv in self.hit_intervals(ray, 1e-9, t_max):
+            if iv.t_enter >= t_min:
+                return HitRecord(t=iv.t_enter,
+                                 point=ray.point_at(iv.t_enter),
+                                 normal=iv.enter_normal,
+                                 mat_obj=self._resolve_mat(iv.enter_obj))
+            if iv.t_exit >= t_min:
+                return HitRecord(t=iv.t_exit,
+                                 point=ray.point_at(iv.t_exit),
+                                 normal=iv.exit_normal,
+                                 mat_obj=self._resolve_mat(iv.exit_obj))
+        return None
+
+    def bounding_box(self):
+        # Conservative: same as A (we can't know what B carved out)
+        return self.left.bounding_box()

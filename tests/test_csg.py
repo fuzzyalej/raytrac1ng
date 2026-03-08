@@ -277,3 +277,68 @@ def test_intersection_bounding_box():
     bb = inter.bounding_box()
     # Should be tighter than a's box
     assert bb.max_pt.x <= 2.0 + 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Task 9: CSGDifference
+# ---------------------------------------------------------------------------
+
+from shapes import CSGDifference
+
+
+def test_difference_sphere_minus_inner_sphere():
+    """
+    A: big sphere, center=0, r=1.5  → t_enter=1.5, t_exit=4.5  (ray from x=-3)
+    B: small sphere, center=0, r=0.8 → t_enter=2.2, t_exit=3.8
+    A-B → intervals [1.5, 2.2] and [3.8, 4.5]
+    """
+    a = Sphere(Vec3(0, 0, 0), 1.5)
+    b = Sphere(Vec3(0, 0, 0), 0.8)
+    d = CSGDifference(a, b)
+    ray = _ray(-3, 0, 0, 1, 0, 0)
+    ivs = d.hit_intervals(ray)
+    assert len(ivs) == 2
+    assert abs(ivs[0].t_enter - 1.5) < 1e-4
+    assert abs(ivs[0].t_exit  - 2.2) < 1e-4
+    assert abs(ivs[1].t_enter - 3.8) < 1e-4
+    assert abs(ivs[1].t_exit  - 4.5) < 1e-4
+
+
+def test_difference_hit_returns_first_entry():
+    a = Sphere(Vec3(0, 0, 0), 1.5)
+    b = Sphere(Vec3(0, 0, 0), 0.8)
+    d = CSGDifference(a, b)
+    ray = _ray(-3, 0, 0, 1, 0, 0)
+    hit = d.hit(ray)
+    assert hit is not None
+    assert abs(hit.t - 1.5) < 1e-4     # first interval, A's entry
+
+
+def test_difference_b_normal_flipped():
+    """At B's entry (becoming A-B exit), normal points inward (flipped from B's outward)."""
+    a = Sphere(Vec3(0, 0, 0), 1.5)
+    b = Sphere(Vec3(0, 0, 0), 0.8)
+    d = CSGDifference(a, b)
+    ray = _ray(-3, 0, 0, 1, 0, 0)
+    ivs = d.hit_intervals(ray)
+    # ivs[0].exit_normal is B's entry normal flipped → should point in +x (outward from result)
+    assert ivs[0].exit_normal.x > 0.9
+
+
+def test_difference_no_overlap():
+    """B entirely misses A → result equals A."""
+    a = Sphere(Vec3(0, 0, 0), 1.0)
+    b = Sphere(Vec3(10, 0, 0), 0.5)   # far away
+    d = CSGDifference(a, b)
+    ray = _ray(-3, 0, 0, 1, 0, 0)
+    ivs = d.hit_intervals(ray)
+    assert len(ivs) == 1
+    assert abs(ivs[0].t_enter - 2.0) < 1e-4
+    assert abs(ivs[0].t_exit  - 4.0) < 1e-4
+
+
+def test_difference_requires_exactly_two_children():
+    import pytest
+    a = Sphere(Vec3(0,0,0), 1.0)
+    with pytest.raises(ValueError):
+        CSGDifference(a, a, a)   # 3 args not allowed
