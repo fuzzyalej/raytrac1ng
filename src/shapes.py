@@ -69,6 +69,30 @@ class Sphere:
         normal = (point - self.center) / self.radius
         return HitRecord(t=t, point=point, normal=normal)
 
+    def hit_intervals(self, ray, t_min: float = 1e-9,
+                      t_max: float = float('inf')) -> list:
+        """Return 0 or 1 HitInterval for this ray.
+
+        t_min should be a tiny epsilon (1e-9) — NOT the usual 0.001 ray bias.
+        t_enter may be negative when the ray origin is inside the sphere;
+        CSG operations handle that case in their own hit() method.
+        """
+        oc = ray.origin - self.center
+        a  = ray.direction.dot(ray.direction)
+        b  = 2.0 * oc.dot(ray.direction)
+        c  = oc.dot(oc) - self.radius * self.radius
+        disc = b * b - 4 * a * c
+        if disc < 0:
+            return []
+        sq = math.sqrt(disc)
+        t1 = (-b - sq) / (2.0 * a)   # smaller root (entry)
+        t2 = (-b + sq) / (2.0 * a)   # larger root  (exit)
+        if t2 < t_min or t1 > t_max:
+            return []   # interval entirely invisible
+        n1 = (ray.point_at(t1) - self.center) / self.radius   # outward at entry
+        n2 = (ray.point_at(t2) - self.center) / self.radius   # outward at exit
+        return [HitInterval(t1, t2, n1, n2, self, self)]
+
     def bounding_box(self):
         from bvh import AABB  # lazy import avoids shapes ↔ bvh circular dependency
         r = Vec3(self.radius, self.radius, self.radius)
@@ -185,6 +209,45 @@ class Box:
         point  = ray.point_at(t)
         return HitRecord(t=t, point=point, normal=normal)
 
+    def hit_intervals(self, ray, t_min: float = 1e-9,
+                      t_max: float = float('inf')) -> list:
+        """Return 0 or 1 HitInterval. t_enter may be negative (ray starts inside)."""
+        t_enter = -float('inf')
+        t_exit  =  float('inf')
+        enter_axis = 0;  enter_sign = -1.0
+        exit_axis  = 0;  exit_sign  =  1.0
+
+        ro = (ray.origin.x,    ray.origin.y,    ray.origin.z)
+        rd = (ray.direction.x, ray.direction.y, ray.direction.z)
+        lo = (self.min_pt.x,   self.min_pt.y,   self.min_pt.z)
+        hi = (self.max_pt.x,   self.max_pt.y,   self.max_pt.z)
+
+        for axis in range(3):
+            if abs(rd[axis]) < 1e-8:
+                if ro[axis] < lo[axis] or ro[axis] > hi[axis]:
+                    return []
+                continue
+            t0 = (lo[axis] - ro[axis]) / rd[axis]
+            t1 = (hi[axis] - ro[axis]) / rd[axis]
+            if t0 <= t1:
+                s0, s1 = -1.0, 1.0
+            else:
+                t0, t1 = t1, t0
+                s0, s1 =  1.0, -1.0
+            if t0 > t_enter:
+                t_enter = t0;  enter_axis = axis;  enter_sign = s0
+            if t1 < t_exit:
+                t_exit  = t1;  exit_axis  = axis;  exit_sign  = s1
+            if t_enter > t_exit:
+                return []
+
+        if t_exit < t_min or t_enter > t_max:
+            return []
+
+        en = [0.0, 0.0, 0.0];  en[enter_axis] = enter_sign
+        ex = [0.0, 0.0, 0.0];  ex[exit_axis]  = exit_sign
+        return [HitInterval(t_enter, t_exit, Vec3(*en), Vec3(*ex), self, self)]
+
     def bounding_box(self):
         from bvh import AABB  # lazy import avoids shapes ↔ bvh circular dependency
         return AABB(self.min_pt, self.max_pt)
@@ -270,6 +333,63 @@ class Cylinder:
         if best_normal is None:
             return None
         return HitRecord(t=best_t, point=ray.point_at(best_t), normal=best_normal)
+
+    def hit_intervals(self, ray, t_min: float = 1e-9,
+                      t_max: float = float('inf')) -> list:
+        """Return 0 or 1 HitInterval. Collects all surface hits, returns [min, max]."""
+        D  = self.axis
+        P  = self.bottom
+        r2 = self.radius * self.radius
+        oc = ray.origin - P
+
+        d_proj  = D.dot(ray.direction)
+        oc_proj = D.dot(oc)
+        d_perp  = ray.direction - D * d_proj
+        oc_perp = oc - D * oc_proj
+
+        hits = []   # list of (t, normal)
+
+        # ---- Curved surface ----
+        a = d_perp.dot(d_perp)
+        if abs(a) > 1e-8:
+            b    = 2.0 * oc_perp.dot(d_perp)
+            c    = oc_perp.dot(oc_perp) - r2
+            disc = b * b - 4.0 * a * c
+            if disc >= 0:
+                sq = math.sqrt(disc)
+                for t_cand in [(-b - sq) / (2.0 * a), (-b + sq) / (2.0 * a)]:
+                    point = ray.point_at(t_cand)
+                    h     = D.dot(point - P)
+                    if 0.0 <= h <= self.height:
+                        n = (point - P - D * h).normalize()
+                        hits.append((t_cand, n))
+
+        # ---- Caps ----
+        for cap_centre, cap_normal in [
+            (self.bottom, D * -1.0),
+            (self.top,    D),
+        ]:
+            denom = ray.direction.dot(cap_normal)
+            if abs(denom) < 1e-8:
+                continue
+            t_cand = (cap_centre - ray.origin).dot(cap_normal) / denom
+            point  = ray.point_at(t_cand)
+            radial = point - cap_centre
+            rp     = radial - D * D.dot(radial)
+            if rp.dot(rp) <= r2:
+                hits.append((t_cand, cap_normal))
+
+        if not hits:
+            return []
+
+        hits.sort(key=lambda x: x[0])
+        t_e, n_e = hits[0]
+        t_x, n_x = hits[-1]
+
+        if t_x < t_min or t_e > t_max:
+            return []
+
+        return [HitInterval(t_e, t_x, n_e, n_x, self, self)]
 
     def bounding_box(self):
         from bvh import AABB  # lazy import avoids shapes ↔ bvh circular dependency
@@ -396,6 +516,82 @@ class Cone:
         if best_normal is None:
             return None
         return HitRecord(t=best_t, point=ray.point_at(best_t), normal=best_normal)
+
+    def hit_intervals(self, ray, t_min: float = 1e-9,
+                      t_max: float = float('inf')) -> list:
+        D     = self.axis
+        P     = self.bottom
+        slope = self.slope
+        R0    = self.bottom_radius
+        oc    = ray.origin - P
+
+        d_proj  = D.dot(ray.direction)
+        oc_proj = D.dot(oc)
+        d_perp  = ray.direction - D * d_proj
+        oc_perp = oc - D * oc_proj
+
+        hits = []   # list of (t, normal)
+
+        # ---- Curved surface ----
+        a = d_perp.dot(d_perp) - (slope * d_proj) ** 2
+        b = 2.0 * (oc_perp.dot(d_perp)
+                   - (R0 + slope * oc_proj) * slope * d_proj)
+        c = oc_perp.dot(oc_perp) - (R0 + slope * oc_proj) ** 2
+
+        if abs(a) > 1e-8:
+            disc = b * b - 4.0 * a * c
+            if disc >= 0:
+                sq = math.sqrt(disc)
+                for t_cand in [(-b - sq)/(2.0*a), (-b + sq)/(2.0*a)]:
+                    point = ray.point_at(t_cand)
+                    h_y   = D.dot(point - P)
+                    if 0.0 <= h_y <= self.height:
+                        radial     = (point - P) - D * h_y
+                        radial_len = radial.length()
+                        if radial_len > 1e-10:
+                            n = (radial / radial_len - D * slope).normalize()
+                        else:
+                            n = -D
+                        hits.append((t_cand, n))
+        elif abs(b) > 1e-8:
+            t_cand = -c / b
+            point  = ray.point_at(t_cand)
+            h_y    = D.dot(point - P)
+            if 0.0 <= h_y <= self.height:
+                radial     = (point - P) - D * h_y
+                radial_len = radial.length()
+                if radial_len > 1e-10:
+                    n = (radial / radial_len - D * slope).normalize()
+                    hits.append((t_cand, n))
+
+        # ---- Caps ----
+        for cap_centre, cap_radius, cap_normal in [
+            (self.bottom, self.bottom_radius, D * -1.0),
+            (self.top,    self.top_radius,    D),
+        ]:
+            if cap_radius <= 0.0:
+                continue
+            denom = ray.direction.dot(cap_normal)
+            if abs(denom) < 1e-8:
+                continue
+            t_cand = (cap_centre - ray.origin).dot(cap_normal) / denom
+            point  = ray.point_at(t_cand)
+            radial = point - cap_centre
+            rp     = radial - D * D.dot(radial)
+            if rp.dot(rp) <= cap_radius ** 2:
+                hits.append((t_cand, cap_normal))
+
+        if not hits:
+            return []
+
+        hits.sort(key=lambda x: x[0])
+        t_e, n_e = hits[0]
+        t_x, n_x = hits[-1]
+
+        if t_x < t_min or t_e > t_max:
+            return []
+
+        return [HitInterval(t_e, t_x, n_e, n_x, self, self)]
 
     def bounding_box(self):
         from bvh import AABB  # lazy import avoids shapes ↔ bvh circular dependency
@@ -598,6 +794,54 @@ class Torus:
                 return HitRecord(t=t, point=p_world, normal=normal)
 
         return None
+
+    def hit_intervals(self, ray, t_min: float = 1e-9,
+                      t_max: float = float('inf')) -> list:
+        """Return 0, 1, or 2 HitIntervals (torus quartic gives up to 4 roots -> 2 pairs)."""
+        q = self._to_local(ray.origin - self.center)
+        d = self._to_local(ray.direction)
+        R, r = self.major_radius, self.minor_radius
+
+        d2          = d.dot(d)
+        dq          = d.dot(q)
+        q2          = q.dot(q)
+        d_radial_sq = d.x * d.x + d.z * d.z
+        dq_radial   = d.x * q.x + d.z * q.z
+        q_radial_sq = q.x * q.x + q.z * q.z
+        K           = q2 + R * R - r * r
+
+        c4 = d2 * d2
+        c3 = 4.0 * d2 * dq
+        c2 = 4.0 * dq * dq + 2.0 * d2 * K - 4.0 * R * R * d_radial_sq
+        c1 = 4.0 * dq * K  - 8.0 * R * R * dq_radial
+        c0 = K * K          - 4.0 * R * R * q_radial_sq
+
+        roots = sorted(_solve_quartic_ferrari(c4, c3, c2, c1, c0))
+
+        def _normal_at(t):
+            p_world = ray.point_at(t)
+            p_loc   = self._to_local(p_world - self.center)
+            rho     = math.sqrt(p_loc.x * p_loc.x + p_loc.z * p_loc.z)
+            if rho < 1e-10:
+                return None
+            cx, cz = R * p_loc.x / rho, R * p_loc.z / rho
+            n_loc  = Vec3(p_loc.x - cx, p_loc.y, p_loc.z - cz).normalize()
+            return self._from_local(n_loc)
+
+        intervals = []
+        i = 0
+        while i + 1 < len(roots):
+            t_e, t_x = roots[i], roots[i + 1]
+            if t_x < t_min or t_e > t_max:
+                i += 2
+                continue
+            n_e = _normal_at(t_e)
+            n_x = _normal_at(t_x)
+            if n_e is not None and n_x is not None:
+                intervals.append(HitInterval(t_e, t_x, n_e, n_x, self, self))
+            i += 2
+
+        return intervals
 
     def bounding_box(self):
         from bvh import AABB  # lazy import avoids shapes ↔ bvh circular dependency
