@@ -962,3 +962,99 @@ class CSGUnion:
                   max(b.max_pt.y for b in boxes),
                   max(b.max_pt.z for b in boxes))
         return AABB(mn, mx)
+
+
+# ---------------------------------------------------------------------------
+# CSGIntersection
+# ---------------------------------------------------------------------------
+
+def _intersect_intervals(lists_of_intervals: list) -> list:
+    """Compute the n-ary intersection of multiple interval lists.
+
+    Returns regions covered by ALL lists simultaneously.
+    Entry point: the latest entry among all lists (that child's normal).
+    Exit  point: the earliest exit (that child's normal).
+    """
+    if not lists_of_intervals:
+        return []
+
+    # Start with the first list, intersect with each subsequent list
+    result = lists_of_intervals[0]
+    for other in lists_of_intervals[1:]:
+        new_result = []
+        for iv_a in result:
+            for iv_b in other:
+                t_enter = max(iv_a.t_enter, iv_b.t_enter)
+                t_exit  = min(iv_a.t_exit,  iv_b.t_exit)
+                if t_enter >= t_exit:
+                    continue
+                # Entry normal: from whichever child entered last
+                if iv_a.t_enter >= iv_b.t_enter:
+                    en, eo = iv_a.enter_normal, iv_a.enter_obj
+                else:
+                    en, eo = iv_b.enter_normal, iv_b.enter_obj
+                # Exit normal: from whichever child exits first
+                if iv_a.t_exit <= iv_b.t_exit:
+                    xn, xo = iv_a.exit_normal, iv_a.exit_obj
+                else:
+                    xn, xo = iv_b.exit_normal, iv_b.exit_obj
+                new_result.append(HitInterval(t_enter, t_exit, en, xn, eo, xo))
+        result = new_result
+
+    return sorted(result, key=lambda iv: iv.t_enter)
+
+
+class CSGIntersection:
+    """n-ary intersection of bounded shapes."""
+
+    def __init__(self, children: list,
+                 color=None, opacity=None, reflect=None, ior=None):
+        if len(children) < 2:
+            raise ValueError("CSGIntersection requires at least 2 children")
+        self.children = children
+        self.color    = color
+        self.opacity  = opacity
+        self.reflect  = reflect
+        self.ior      = ior
+
+    def _has_material(self) -> bool:
+        return any(v is not None for v in (self.color, self.opacity,
+                                           self.reflect, self.ior))
+
+    def _resolve_mat(self, child_obj):
+        if not self._has_material():
+            return child_obj
+        return _ResolvedMat(self, child_obj)
+
+    def hit_intervals(self, ray, t_min: float = 1e-9,
+                      t_max: float = float('inf')) -> list:
+        lists = [c.hit_intervals(ray, t_min, t_max) for c in self.children]
+        return _intersect_intervals(lists)
+
+    def hit(self, ray, t_min: float = 0.001,
+            t_max: float = float('inf')):
+        for iv in self.hit_intervals(ray, 1e-9, t_max):
+            if iv.t_enter >= t_min:
+                return HitRecord(t=iv.t_enter,
+                                 point=ray.point_at(iv.t_enter),
+                                 normal=iv.enter_normal,
+                                 mat_obj=self._resolve_mat(iv.enter_obj))
+            if iv.t_exit >= t_min:
+                return HitRecord(t=iv.t_exit,
+                                 point=ray.point_at(iv.t_exit),
+                                 normal=iv.exit_normal,
+                                 mat_obj=self._resolve_mat(iv.exit_obj))
+        return None
+
+    def bounding_box(self):
+        from bvh import AABB
+        boxes = [c.bounding_box() for c in self.children]
+        mn = Vec3(max(b.min_pt.x for b in boxes),
+                  max(b.min_pt.y for b in boxes),
+                  max(b.min_pt.z for b in boxes))
+        mx = Vec3(min(b.max_pt.x for b in boxes),
+                  min(b.max_pt.y for b in boxes),
+                  min(b.max_pt.z for b in boxes))
+        # Guard against degenerate (non-overlapping) bounding boxes
+        mn = Vec3(min(mn.x, mx.x), min(mn.y, mx.y), min(mn.z, mx.z))
+        return AABB(mn, mx)

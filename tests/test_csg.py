@@ -237,3 +237,43 @@ def test_union_material_override():
     assert hit is not None
     # mat_obj should be a _ResolvedMat with color=(0,0,1)
     assert hit.mat_obj.color == Color(0, 0, 1)
+
+
+# ---------------------------------------------------------------------------
+# Task 8: CSGIntersection
+# ---------------------------------------------------------------------------
+
+from shapes import CSGIntersection
+
+
+def test_intersection_two_overlapping_spheres():
+    """
+    a: center=(-0.3, 0, 0), r=1  -> enters at x=-1.3 (t=1.7), exits at x=0.7 (t=3.7)
+    b: center=( 0.3, 0, 0), r=1  -> enters at x=-0.7 (t=2.3), exits at x=1.3 (t=4.3)
+    intersection: enters at t=2.3 (b's entry), exits at t=3.7 (a's exit)
+    """
+    a = Sphere(Vec3(-0.3, 0, 0), 1.0)
+    b = Sphere(Vec3( 0.3, 0, 0), 1.0)
+    inter = CSGIntersection([a, b])
+    ray = _ray(-3, 0, 0, 1, 0, 0)
+    hit = inter.hit(ray)
+    assert hit is not None
+    assert abs(hit.t - 2.3) < 1e-4   # enters at b's entry (last-entering child)
+
+
+def test_intersection_no_overlap():
+    """Two non-overlapping spheres -> no intersection."""
+    a = Sphere(Vec3(-2, 0, 0), 0.5)
+    b = Sphere(Vec3( 2, 0, 0), 0.5)
+    inter = CSGIntersection([a, b])
+    ray = _ray(-5, 0, 0, 1, 0, 0)
+    assert inter.hit(ray) is None
+
+
+def test_intersection_bounding_box():
+    a = Sphere(Vec3(0, 0, 0), 2.0)
+    b = Sphere(Vec3(0, 0, 0), 1.0)
+    inter = CSGIntersection([a, b])
+    bb = inter.bounding_box()
+    # Should be tighter than a's box
+    assert bb.max_pt.x <= 2.0 + 1e-6
