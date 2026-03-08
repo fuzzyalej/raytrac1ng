@@ -177,3 +177,63 @@ def test_torus_hit_intervals_miss():
     t = Torus(Vec3(0, 0, 0), Vec3(0, 1, 0), major_radius=2.0, minor_radius=0.5)
     ray = _ray(0, 5, 0, 0, 1, 0)    # above torus
     assert t.hit_intervals(ray) == []
+
+
+# ---------------------------------------------------------------------------
+# Task 7: CSGUnion
+# ---------------------------------------------------------------------------
+
+from shapes import CSGUnion
+
+
+def test_union_two_separate_spheres_hit_closer():
+    """Union of two non-overlapping spheres: ray hits the closer one."""
+    a = Sphere(Vec3(-2, 0, 0), 0.5)
+    b = Sphere(Vec3( 2, 0, 0), 0.5)
+    u = CSGUnion([a, b])
+    ray = _ray(-5, 0, 0, 1, 0, 0)
+    hit = u.hit(ray)
+    assert hit is not None
+    assert abs(hit.t - 2.5) < 1e-4    # enters 'a' at x=-2.5
+
+
+def test_union_two_overlapping_spheres_one_interval():
+    """Overlapping spheres merge into a single interval."""
+    a = Sphere(Vec3(-0.3, 0, 0), 1.0)
+    b = Sphere(Vec3( 0.3, 0, 0), 1.0)
+    u = CSGUnion([a, b])
+    ray = _ray(-3, 0, 0, 1, 0, 0)
+    ivs = u.hit_intervals(ray)
+    assert len(ivs) == 1              # merged into one
+
+
+def test_union_bounding_box():
+    a = Sphere(Vec3(-2, 0, 0), 1.0)
+    b = Sphere(Vec3( 2, 0, 0), 1.0)
+    u = CSGUnion([a, b])
+    bb = u.bounding_box()
+    assert bb.min_pt.x <= -3.0
+    assert bb.max_pt.x >=  3.0
+
+
+def test_union_inherits_child_material():
+    """When CSGUnion has no material override, child material is used."""
+    from color import Color
+    a = Sphere(Vec3(0, 0, 0), 1.0, color=Color(1, 0, 0))
+    u = CSGUnion([a])
+    ray = _ray(-3, 0, 0, 1, 0, 0)
+    hit = u.hit(ray)
+    assert hit is not None
+    assert hit.mat_obj is a           # child is the material source
+
+
+def test_union_material_override():
+    """CSGUnion color override takes precedence over child."""
+    from color import Color
+    a = Sphere(Vec3(0, 0, 0), 1.0, color=Color(1, 0, 0))
+    u = CSGUnion([a], color=Color(0, 0, 1))
+    ray = _ray(-3, 0, 0, 1, 0, 0)
+    hit = u.hit(ray)
+    assert hit is not None
+    # mat_obj should be a _ResolvedMat with color=(0,0,1)
+    assert hit.mat_obj.color == Color(0, 0, 1)

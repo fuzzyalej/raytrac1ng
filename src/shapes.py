@@ -849,3 +849,116 @@ class Torus:
         extent = self.major_radius + self.minor_radius
         r = Vec3(extent, extent, extent)
         return AABB(self.center - r, self.center + r)
+
+
+# ---------------------------------------------------------------------------
+# CSG helpers
+# ---------------------------------------------------------------------------
+
+_CSG_FUSE_EPS = 0.002  # intervals within this distance are fused
+
+
+def _merge_intervals(intervals: list, fuse: bool = False) -> list:
+    """Merge a list of HitIntervals into non-overlapping sorted intervals.
+
+    fuse=True also merges intervals that are within _CSG_FUSE_EPS of each other
+    (suppresses internal seams for glass-on-glass unions).
+    """
+    if not intervals:
+        return []
+    eps = _CSG_FUSE_EPS if fuse else 0.0
+    intervals = sorted(intervals, key=lambda iv: iv.t_enter)
+    result = [intervals[0]]
+    for iv in intervals[1:]:
+        last = result[-1]
+        if iv.t_enter <= last.t_exit + eps:
+            # overlap or touch — extend
+            if iv.t_exit > last.t_exit:
+                result[-1] = HitInterval(
+                    t_enter=last.t_enter,
+                    t_exit=iv.t_exit,
+                    enter_normal=last.enter_normal,
+                    exit_normal=iv.exit_normal,
+                    enter_obj=last.enter_obj,
+                    exit_obj=iv.exit_obj,
+                )
+        else:
+            result.append(iv)
+    return result
+
+
+class _ResolvedMat:
+    """Transient per-hit object that merges a CSG node's overrides with a child's material."""
+    __slots__ = ('color', 'opacity', 'reflect', 'ior')
+
+    def __init__(self, csg, child):
+        self.color   = csg.color   if csg.color   is not None else child.color
+        self.opacity = csg.opacity if csg.opacity is not None else child.opacity
+        self.reflect = csg.reflect if csg.reflect is not None else child.reflect
+        self.ior     = csg.ior     if csg.ior     is not None else child.ior
+
+
+# ---------------------------------------------------------------------------
+# CSGUnion
+# ---------------------------------------------------------------------------
+
+class CSGUnion:
+    """n-ary union of bounded shapes.
+
+    fuse=True suppresses internal seams (use for transparent/glass children).
+    Optional color/opacity/reflect/ior override child materials per-field.
+    """
+
+    def __init__(self, children: list, fuse: bool = False,
+                 color=None, opacity=None, reflect=None, ior=None):
+        if not children:
+            raise ValueError("CSGUnion requires at least one child")
+        self.children = children
+        self.fuse     = fuse
+        self.color    = color
+        self.opacity  = opacity
+        self.reflect  = reflect
+        self.ior      = ior
+
+    def _has_material(self) -> bool:
+        return any(v is not None for v in (self.color, self.opacity,
+                                           self.reflect, self.ior))
+
+    def _resolve_mat(self, child_obj):
+        if not self._has_material():
+            return child_obj
+        return _ResolvedMat(self, child_obj)
+
+    def hit_intervals(self, ray, t_min: float = 1e-9,
+                      t_max: float = float('inf')) -> list:
+        all_ivs = []
+        for child in self.children:
+            all_ivs.extend(child.hit_intervals(ray, t_min, t_max))
+        return _merge_intervals(all_ivs, fuse=self.fuse)
+
+    def hit(self, ray, t_min: float = 0.001,
+            t_max: float = float('inf')):
+        for iv in self.hit_intervals(ray, 1e-9, t_max):
+            if iv.t_enter >= t_min:
+                return HitRecord(t=iv.t_enter,
+                                 point=ray.point_at(iv.t_enter),
+                                 normal=iv.enter_normal,
+                                 mat_obj=self._resolve_mat(iv.enter_obj))
+            if iv.t_exit >= t_min:
+                # ray started inside this interval
+                return HitRecord(t=iv.t_exit,
+                                 point=ray.point_at(iv.t_exit),
+                                 normal=iv.exit_normal,
+                                 mat_obj=self._resolve_mat(iv.exit_obj))
+        return None
+
+    def bounding_box(self):
+        from bvh import AABB
+        boxes = [c.bounding_box() for c in self.children]
+        mn = Vec3(min(b.min_pt.x for b in boxes),
+                  min(b.min_pt.y for b in boxes),
+                  min(b.min_pt.z for b in boxes))
+        mx = Vec3(max(b.max_pt.x for b in boxes),
+                  max(b.max_pt.y for b in boxes),
+                  max(b.max_pt.z for b in boxes))
+        return AABB(mn, mx)
