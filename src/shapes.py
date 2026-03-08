@@ -9,15 +9,27 @@ from color import Color
 
 
 # ---------------------------------------------------------------------------
-# Hit record
+# Hit record and interval
 # ---------------------------------------------------------------------------
+
+@dataclass
+class HitInterval:
+    """A contiguous segment [t_enter, t_exit] of ray–solid overlap."""
+    t_enter:      float
+    t_exit:       float
+    enter_normal: Vec3    # outward normal at the entry face
+    exit_normal:  Vec3    # outward normal at the exit face
+    enter_obj:    object  # source shape for material at entry
+    exit_obj:     object  # source shape for material at exit
+
 
 @dataclass
 class HitRecord:
     """Information about a ray–object intersection."""
-    t: float
-    point: Vec3
-    normal: Vec3
+    t:       float
+    point:   Vec3
+    normal:  Vec3
+    mat_obj: object = None  # if set, renderer uses this for material instead of obj
 
 
 # ---------------------------------------------------------------------------
