@@ -1218,8 +1218,8 @@ class Triangle:
             normal = (self.n0 * w + self.n1 * u + self.n2 * v).normalize()
         else:
             normal = edge1.cross(edge2).normalize()
-            if normal.dot(ray.direction) > 0:
-                normal = -normal
+        if normal.dot(ray.direction) > 0:
+            normal = -normal
         return HitRecord(t=t, point=point, normal=normal, mat_obj=self)
 
     def bounding_box(self):

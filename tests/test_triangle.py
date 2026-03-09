@@ -102,3 +102,17 @@ def test_partial_normals_raises():
     n = Vec3(0, 0, -1)
     with pytest.raises(ValueError):
         Triangle(V0, V1, V2, n0=n, n1=n)  # missing n2
+
+
+def test_smooth_normals_back_face_flipped():
+    """A ray hitting the back of a smooth-shaded triangle gets a flipped normal."""
+    n0 = Vec3(0, 0, -1)
+    n1 = Vec3(0, 0, -1)
+    n2 = Vec3(0, 0, -1)
+    tri = Triangle(V0, V1, V2, n0=n0, n1=n1, n2=n2)
+    # Ray from the positive-Z side (hitting the back face)
+    ray = _ray((0.25, 0.25, 1), (0, 0, -1))
+    h = tri.hit(ray)
+    assert h is not None
+    # Normal must oppose the ray direction (dot < 0)
+    assert h.normal.dot(Vec3(0, 0, -1)) < 0  # normal should point away from ray

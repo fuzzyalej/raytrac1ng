@@ -67,84 +67,83 @@ def load_obj(path: str,
     triangles: list[Triangle] = []
 
     try:
-        fh = open(path)
+        with open(path) as fh:
+            for lineno, line in enumerate(fh, 1):
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                # Skip smooth-shading groups (we use vn data directly)
+                if line == 's' or line.startswith('s ') or line.startswith('s\t'):
+                    continue
+                parts = line.split()
+                directive = parts[0]
+
+                if directive == 'v':
+                    if len(parts) < 4:
+                        raise ValueError(f"{path}:{lineno}: 'v' needs 3 components, got {len(parts)-1}")
+                    vertices.append(Vec3(float(parts[1]), float(parts[2]), float(parts[3])))
+
+                elif directive == 'vn':
+                    if len(parts) < 4:
+                        raise ValueError(f"{path}:{lineno}: 'vn' needs 3 components, got {len(parts)-1}")
+                    normals.append(Vec3(float(parts[1]), float(parts[2]), float(parts[3])))
+
+                elif directive == 'vt':
+                    pass  # tex-coords parsed to handle f v/vt/vn syntax, not stored
+
+                elif directive == 'mtllib':
+                    filename = line[len('mtllib'):].strip()
+                    mtl_path = os.path.join(obj_dir, filename)
+                    materials.update(_parse_mtl(mtl_path))
+
+                elif directive == 'usemtl':
+                    current_mat = line[len('usemtl'):].strip()
+                    if current_mat not in materials:
+                        materials[current_mat] = {'color': Color(1, 1, 1), 'opacity': 1.0}
+
+                elif directive == 'f':
+                    face_tokens = parts[1:]
+                    if len(face_tokens) < 3:
+                        continue  # skip degenerate edge or point faces
+                    n_v  = len(vertices)
+                    n_vn = len(normals)
+                    parsed = []
+                    for tok in face_tokens:
+                        vi, vti, vni = _parse_face_vertex(tok)
+                        vi  = vi  + n_v  if vi  < 0 else vi  - 1
+                        vni = (vni + n_vn if vni < 0 else vni - 1) if vni is not None else None
+                        parsed.append((vi, vni))
+
+                    # Fan triangulation: (0,1,2), (0,2,3), (0,3,4), ...
+                    mat_props = materials.get(current_mat, materials['__default__'])
+                    tri_color   = mat_props['color']
+                    tri_opacity = mat_props['opacity']
+
+                    for i in range(1, len(parsed) - 1):
+                        ai, ani = parsed[0]
+                        bi, bni = parsed[i]
+                        ci, cni = parsed[i + 1]
+
+                        n0 = normals[ani] if ani is not None else None
+                        n1 = normals[bni] if bni is not None else None
+                        n2 = normals[cni] if cni is not None else None
+
+                        try:
+                            triangles.append(Triangle(
+                                vertices[ai], vertices[bi], vertices[ci],
+                                n0=n0, n1=n1, n2=n2,
+                                color=tri_color, opacity=tri_opacity,
+                                reflect=reflect, ior=ior,
+                            ))
+                        except ValueError:
+                            # Mixed normal specification — fall back to flat shading for this face
+                            triangles.append(Triangle(
+                                vertices[ai], vertices[bi], vertices[ci],
+                                color=tri_color, opacity=tri_opacity,
+                                reflect=reflect, ior=ior,
+                            ))
     except OSError as exc:
         raise OSError(f"load_obj: cannot open '{os.path.abspath(path)}'") from exc
-    with fh:
-        for lineno, line in enumerate(fh, 1):
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            # Skip smooth-shading groups (we use vn data directly)
-            if line == 's' or line.startswith('s ') or line.startswith('s\t'):
-                continue
-            parts = line.split()
-            directive = parts[0]
-
-            if directive == 'v':
-                if len(parts) < 4:
-                    raise ValueError(f"{path}:{lineno}: 'v' needs 3 components, got {len(parts)-1}")
-                vertices.append(Vec3(float(parts[1]), float(parts[2]), float(parts[3])))
-
-            elif directive == 'vn':
-                if len(parts) < 4:
-                    raise ValueError(f"{path}:{lineno}: 'vn' needs 3 components, got {len(parts)-1}")
-                normals.append(Vec3(float(parts[1]), float(parts[2]), float(parts[3])))
-
-            elif directive == 'vt':
-                pass  # tex-coords parsed to handle f v/vt/vn syntax, not stored
-
-            elif directive == 'mtllib':
-                filename = line[len('mtllib'):].strip()
-                mtl_path = os.path.join(obj_dir, filename)
-                materials.update(_parse_mtl(mtl_path))
-
-            elif directive == 'usemtl':
-                current_mat = line[len('usemtl'):].strip()
-                if current_mat not in materials:
-                    materials[current_mat] = {'color': Color(1, 1, 1), 'opacity': 1.0}
-
-            elif directive == 'f':
-                face_tokens = parts[1:]
-                if len(face_tokens) < 3:
-                    continue  # skip degenerate edge or point faces
-                n_v  = len(vertices)
-                n_vn = len(normals)
-                parsed = []
-                for tok in face_tokens:
-                    vi, vti, vni = _parse_face_vertex(tok)
-                    vi  = vi  + n_v  if vi  < 0 else vi  - 1
-                    vni = (vni + n_vn if vni < 0 else vni - 1) if vni is not None else None
-                    parsed.append((vi, vni))
-
-                # Fan triangulation: (0,1,2), (0,2,3), (0,3,4), ...
-                mat_props = materials.get(current_mat, materials['__default__'])
-                tri_color   = mat_props['color']
-                tri_opacity = mat_props['opacity']
-
-                for i in range(1, len(parsed) - 1):
-                    ai, ani = parsed[0]
-                    bi, bni = parsed[i]
-                    ci, cni = parsed[i + 1]
-
-                    n0 = normals[ani] if ani is not None else None
-                    n1 = normals[bni] if bni is not None else None
-                    n2 = normals[cni] if cni is not None else None
-
-                    try:
-                        triangles.append(Triangle(
-                            vertices[ai], vertices[bi], vertices[ci],
-                            n0=n0, n1=n1, n2=n2,
-                            color=tri_color, opacity=tri_opacity,
-                            reflect=reflect, ior=ior,
-                        ))
-                    except ValueError:
-                        # Mixed normal specification — fall back to flat shading for this face
-                        triangles.append(Triangle(
-                            vertices[ai], vertices[bi], vertices[ci],
-                            color=tri_color, opacity=tri_opacity,
-                            reflect=reflect, ior=ior,
-                        ))
 
     # Apply color/opacity override (reflect/ior already baked per-triangle above)
     if color is not None:
