@@ -1,0 +1,23 @@
+// ─────────────────────────────────────────────────────────────────────────────
+//  15-boot.pow  —  OBJ mesh loading — leather boot
+//
+//  Boot extents (measured):
+//    X: -0.1368 .. 0.1702  center = -0.006  width  ~ 0.307
+//    Y: -0.0001 .. 0.2022  center =  0.079  height ~ 0.202
+//    Z: -0.0540 .. 0.0563  center =  0.002  depth  ~ 0.110
+//
+//  Camera placed ~1.0 units in front and above, looking at the boot centre.
+// ─────────────────────────────────────────────────────────────────────────────
+
+camera { location (0.0, 0.28, -0.90)  look_at (-0.006, 0.079, 0.002)  fov 40 }
+
+light { position (0.5, 0.8, -0.6)  radius 0.05  samples 16 }
+
+// Ground plane at boot min-Y (≈ 0.0)
+plane { normal (0, 1, 0)  offset -0.0001  color (0.82, 0.80, 0.76)  reflect 0.05 }
+
+mesh {
+    file "models/boot.obj"
+    color (0.55, 0.35, 0.18)
+    reflect 0.08
+}
