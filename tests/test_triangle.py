@@ -93,3 +93,5 @@ def test_material_custom():
     tri = Triangle(V0, V1, V2, color=Color(1, 0, 0), opacity=0.5, reflect=0.2, ior=1.5)
     assert tri.color == Color(1, 0, 0)
     assert tri.opacity == 0.5
+    assert tri.reflect == 0.2
+    assert tri.ior == 1.5
