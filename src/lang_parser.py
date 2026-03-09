@@ -130,10 +130,10 @@ class SceneTorus:
 @dataclass
 class SceneMesh:
     file:    str
-    color:   tuple = None   # None means use OBJ/MTL per-triangle colors
-    opacity: float = None   # None means use OBJ/MTL per-triangle opacity
-    reflect: float = 0.0
-    ior:     float = 1.0
+    color:   tuple | None = None   # None = use OBJ/MTL per-triangle colors
+    opacity: float | None = None   # None = use OBJ/MTL per-triangle opacity
+    reflect: float        = 0.0
+    ior:     float        = 1.0
 
 
 @dataclass
@@ -994,11 +994,13 @@ def _build_scene_item(kind: str, props: dict, mat: dict, mat_ref_present: bool =
         )
     if kind == "mesh":
         if "file" not in props:
-            raise KeyError("file")
+            raise ParseError("mesh block requires a 'file' field")
         return SceneMesh(
             file=str(props["file"]),
             color=mat["color"] if ("color" in props or mat_ref_present) else None,
             opacity=mat["opacity"] if ("opacity" in props or mat_ref_present) else None,
+            # reflect and ior are not representable in OBJ/MTL format,
+            # so they are always applied as overrides (defaulting to 0.0 / 1.0).
             reflect=float(mat["reflect"]),
             ior=float(mat["ior"]),
         )

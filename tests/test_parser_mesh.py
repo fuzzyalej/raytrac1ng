@@ -37,6 +37,8 @@ def test_parse_mesh_with_reflect_ior():
     m = [i for i in items if isinstance(i, SceneMesh)][0]
     assert abs(m.reflect - 0.3) < 1e-6
     assert abs(m.ior - 1.5) < 1e-6
+    assert m.color is None
+    assert m.opacity is None
 
 
 def test_parse_mesh_defaults():
@@ -48,8 +50,9 @@ def test_parse_mesh_defaults():
 
 
 def test_parse_mesh_missing_file_raises():
+    from lang_parser import ParseError
     src = CAM + LIGHT + 'mesh { color (1,0,0) }\n'
-    with pytest.raises(Exception):
+    with pytest.raises(ParseError):
         parse_source(src)
 
 
