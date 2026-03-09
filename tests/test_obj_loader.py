@@ -3,7 +3,6 @@ import os
 import textwrap
 import tempfile
 
-import pytest
 from obj_loader import load_obj
 from shapes import TriangleMesh, Triangle
 from color import Color
@@ -175,3 +174,12 @@ def test_reflect_ior_always_applied():
     os.unlink(path)
     assert abs(mesh._triangles[0].reflect - 0.3) < 1e-6
     assert abs(mesh._triangles[0].ior - 1.5) < 1e-6
+
+
+def test_opacity_override_without_color():
+    path = _write_file(OBJ_ONE_TRI, '.obj')
+    mesh = load_obj(path, opacity=0.5)
+    os.unlink(path)
+    assert abs(mesh._triangles[0].opacity - 0.5) < 1e-6
+    # Color should remain unchanged (white)
+    assert mesh._triangles[0].color == Color(1.0, 1.0, 1.0)

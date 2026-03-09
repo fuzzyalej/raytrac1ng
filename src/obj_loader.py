@@ -28,7 +28,7 @@ def _parse_mtl(path: str) -> dict[str, dict]:
                     current['opacity'] = float(parts[1])
                 elif parts[0] == 'Tr' and current is not None:
                     current['opacity'] = 1.0 - float(parts[1])
-    except OSError:
+    except FileNotFoundError:
         pass  # Missing MTL is fine — triangles keep default material
     return materials
 
@@ -66,8 +66,12 @@ def load_obj(path: str,
 
     triangles: list[Triangle] = []
 
-    with open(path) as fh:
-        for line in fh:
+    try:
+        fh = open(path)
+    except OSError as exc:
+        raise OSError(f"load_obj: cannot open '{os.path.abspath(path)}'") from exc
+    with fh:
+        for lineno, line in enumerate(fh, 1):
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
@@ -78,25 +82,32 @@ def load_obj(path: str,
             directive = parts[0]
 
             if directive == 'v':
+                if len(parts) < 4:
+                    raise ValueError(f"{path}:{lineno}: 'v' needs 3 components, got {len(parts)-1}")
                 vertices.append(Vec3(float(parts[1]), float(parts[2]), float(parts[3])))
 
             elif directive == 'vn':
+                if len(parts) < 4:
+                    raise ValueError(f"{path}:{lineno}: 'vn' needs 3 components, got {len(parts)-1}")
                 normals.append(Vec3(float(parts[1]), float(parts[2]), float(parts[3])))
 
             elif directive == 'vt':
                 pass  # tex-coords parsed to handle f v/vt/vn syntax, not stored
 
             elif directive == 'mtllib':
-                mtl_path = os.path.join(obj_dir, parts[1])
+                filename = line[len('mtllib'):].strip()
+                mtl_path = os.path.join(obj_dir, filename)
                 materials.update(_parse_mtl(mtl_path))
 
             elif directive == 'usemtl':
-                current_mat = parts[1]
+                current_mat = line[len('usemtl'):].strip()
                 if current_mat not in materials:
                     materials[current_mat] = {'color': Color(1, 1, 1), 'opacity': 1.0}
 
             elif directive == 'f':
                 face_tokens = parts[1:]
+                if len(face_tokens) < 3:
+                    continue  # skip degenerate edge or point faces
                 n_v  = len(vertices)
                 n_vn = len(normals)
                 parsed = []
@@ -120,17 +131,27 @@ def load_obj(path: str,
                     n1 = normals[bni] if bni is not None else None
                     n2 = normals[cni] if cni is not None else None
 
-                    triangles.append(Triangle(
-                        vertices[ai], vertices[bi], vertices[ci],
-                        n0=n0, n1=n1, n2=n2,
-                        color=tri_color, opacity=tri_opacity,
-                        reflect=reflect, ior=ior,
-                    ))
+                    try:
+                        triangles.append(Triangle(
+                            vertices[ai], vertices[bi], vertices[ci],
+                            n0=n0, n1=n1, n2=n2,
+                            color=tri_color, opacity=tri_opacity,
+                            reflect=reflect, ior=ior,
+                        ))
+                    except ValueError:
+                        # Mixed normal specification — fall back to flat shading for this face
+                        triangles.append(Triangle(
+                            vertices[ai], vertices[bi], vertices[ci],
+                            color=tri_color, opacity=tri_opacity,
+                            reflect=reflect, ior=ior,
+                        ))
 
     # Apply color/opacity override (reflect/ior already baked per-triangle above)
     if color is not None:
         for tri in triangles:
-            tri.color   = color
-            tri.opacity = opacity if opacity is not None else tri.opacity
+            tri.color = color
+    if opacity is not None:
+        for tri in triangles:
+            tri.opacity = opacity
 
     return TriangleMesh(triangles)

@@ -1246,7 +1246,7 @@ class TriangleMesh:
     accelerates ray-triangle intersections within the mesh.
     """
 
-    def __init__(self, triangles: list):
+    def __init__(self, triangles: 'list[Triangle]'):
         from bvh import BVH, AABB
         self._triangles = triangles
         self._bvh = BVH.build(triangles)
