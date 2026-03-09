@@ -15,7 +15,6 @@ from lang_parser import (
 from scene import Scene, Camera, Light
 from shapes import Sphere, Plane, Box, Cylinder, Cone, Torus
 from shapes import CSGUnion, CSGIntersection, CSGDifference
-from shapes import TriangleMesh
 from obj_loader import load_obj
 from vector import Vec3
 from color import Color
