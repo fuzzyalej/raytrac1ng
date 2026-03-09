@@ -496,9 +496,7 @@ python3 main.py examples/01-basic.pov -W 1024 -H 768 -o render.png
 
 ## Limitations
 
-- Six primitive types (sphere, plane, box, cylinder, cone, torus); no CSG
 - Pure Python (slow for large images / many shadow samples); parallel rendering via `--jobs N` mitigates this for CPU-bound scenes but incurs pickling overhead
-- Shadow rays use a linear scan rather than the BVH — area lights with many objects will be less accelerated than primary rays
 - Only sphere area lights — no disk or rectangular lights
 
 ---
@@ -508,7 +506,6 @@ python3 main.py examples/01-basic.pov -W 1024 -H 768 -o render.png
 - **Disk and rectangular area lights** — more physically accurate than sphere area lights for studio-style lighting setups (e.g., `disk { position ... normal ... radius ... }`)
 - **Mesh file loading (OBJ/PLY)** for complex geometry
 - **GIF animations** - capacity of animating objects through space and output a gif/video
-- **Figure composition**
 
 ---
 

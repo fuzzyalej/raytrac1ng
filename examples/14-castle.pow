@@ -1,0 +1,149 @@
+// ─────────────────────────────────────────────────────────────────────────────
+//  14-castle.pow  —  Gothic Night Castle  (book-cover edition)
+//
+//  Mood     : moonlit darkness, warm torch glow, still reflective moat
+//  View     : three-quarter elevated — camera right-front, looking up-left
+//  Features : CSG gatehouse arch, corner towers, tall keep with cap turret,
+//             curtain walls, merlons via loops, reflective moat water
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Materials ────────────────────────────────────────────────────────────────
+let dark_stone   = material { color (0.13, 0.12, 0.16)  opacity 1.0  reflect 0.05  ior 1.0 }
+let aged_stone   = material { color (0.22, 0.20, 0.26)  opacity 1.0  reflect 0.08  ior 1.0 }
+let slate_roof   = material { color (0.07, 0.07, 0.12)  opacity 1.0  reflect 0.14  ior 1.0 }
+let moat_water   = material { color (0.03, 0.05, 0.11)  opacity 1.0  reflect 0.90  ior 1.0 }
+let torch_fire   = material { color (1.00, 0.52, 0.04)  opacity 1.0  reflect 0.00  ior 1.0 }
+let moon_surface = material { color (0.95, 0.93, 0.80)  opacity 1.0  reflect 0.18  ior 1.0 }
+
+// ── Camera ───────────────────────────────────────────────────────────────────
+// Slightly lower so we clip the moat water at the bottom of frame
+camera { location (18, 12, -30)  look_at (0, 8, 2)  fov 50 }
+
+// ── Lights ───────────────────────────────────────────────────────────────────
+// Primary moonlight — upper-left of camera, illuminates the front-right faces
+light { position (-20, 55, -50)  radius 7.0  samples 32 }
+// Soft fill — dim scattered sky glow from the right, lifts shadow detail
+light { position ( 30, 35, -45)  radius 14.0  samples 16 }
+// Gate torch — warm amber glow at portcullis
+light { position (0, 4.0, -9.5)  radius 0.5  samples 8 }
+// Wall-walk torches — flanking the courtyard
+light { position (-6.5, 8.5, 1.0)  radius 0.4  samples 8 }
+light { position ( 6.5, 8.5, 1.0)  radius 0.4  samples 8 }
+
+// ── Moat — still dark water, 90 % reflective ─────────────────────────────────
+plane { normal (0,1,0)  offset 0  material moat_water }
+
+// ── Moon disc — placed in the upper-left sky, within camera frustum ───────────
+// (light source remains at -20,55,-50; the visible sphere is a cosmetic disc)
+sphere { center (-25, 35, 60)  radius 7.0  material moon_surface }
+
+// ── Torch flame spheres (match light positions) ───────────────────────────────
+sphere { center ( 0.0, 4.2, -9.5)  radius 0.18  material torch_fire }
+sphere { center (-6.5, 8.7,  1.0)  radius 0.15  material torch_fire }
+sphere { center ( 6.5, 8.7,  1.0)  radius 0.15  material torch_fire }
+
+// ── Corner tower builder ──────────────────────────────────────────────────────
+// Round stone cylinder with slate cone roof and ten stone merlons at the crown
+let corner_tower = fn(cx, cz) {
+  cylinder { bottom (cx, 0, cz)   top (cx, 18, cz)  radius 2.2  material dark_stone }
+  cone     { bottom (cx, 18, cz)  top (cx, 25, cz)  bottom_radius 2.5  top_radius 0.0  material slate_roof }
+  for i in range(10) {
+    let angle = i * 2 * pi / 10
+    let mx = cx + cos(angle) * 2.5
+    let mz = cz + sin(angle) * 2.5
+    box { min (mx - 0.35, 18, mz - 0.35)  max (mx + 0.35, 21, mz + 0.35)  material dark_stone }
+  }
+}
+
+corner_tower(-8.0, -8.0)   // front-left
+corner_tower( 8.0, -8.0)   // front-right  (closest to camera)
+corner_tower(-8.0,  8.0)   // back-left
+corner_tower( 8.0,  8.0)   // back-right
+
+// ── Curtain walls ─────────────────────────────────────────────────────────────
+// Front wall — two halves flanking the gatehouse
+box { min (-8.0, 0, -9.5)  max (-3.0, 11, -6.5)  material dark_stone }
+box { min ( 3.0, 0, -9.5)  max ( 8.0, 11, -6.5)  material dark_stone }
+// Side walls
+box { min (-9.5, 0, -8.0)  max (-6.5, 11,  8.0)  material dark_stone }
+box { min ( 6.5, 0, -8.0)  max ( 9.5, 11,  8.0)  material dark_stone }
+// Back wall
+box { min (-8.0, 0,  6.5)  max ( 8.0, 11,  9.5)  material dark_stone }
+
+// ── Battlement merlons on curtain walls ───────────────────────────────────────
+// Right side wall (merlons along Z)
+for i in range(9) {
+  let mz = -7.2 + i * 1.7
+  box { min (6.5, 11, mz)  max (9.5, 14, mz + 0.85)  material dark_stone }
+}
+// Left side wall
+for i in range(9) {
+  let mz = -7.2 + i * 1.7
+  box { min (-9.5, 11, mz)  max (-6.5, 14, mz + 0.85)  material dark_stone }
+}
+// Front wall — left portion merlons
+for i in range(3) {
+  let mx = -7.5 + i * 1.8
+  box { min (mx, 11, -9.5)  max (mx + 0.9, 14, -6.5)  material dark_stone }
+}
+// Front wall — right portion merlons
+for i in range(3) {
+  let mx = 3.6 + i * 1.8
+  box { min (mx, 11, -9.5)  max (mx + 0.9, 14, -6.5)  material dark_stone }
+}
+// Back wall merlons
+for i in range(9) {
+  let mx = -7.2 + i * 1.7
+  box { min (mx, 11, 6.5)  max (mx + 0.85, 14, 9.5)  material dark_stone }
+}
+
+// ── Gatehouse — CSG difference: box body ∖ (arch + arrow slits) ──────────────
+// The portcullis arch is a union of a rectangular shaft and a horizontal
+// cylinder (axis along Z) that together carve a Gothic arch opening.
+difference {
+  color   (0.14, 0.13, 0.18)
+  reflect 0.05
+  box { min (-3.0, 0, -10.5)  max (3.0, 14, -6.0) }
+  union {
+    // Arch shaft (rectangular lower part of the opening)
+    box      { min (-1.4,  0.0, -11.0)  max ( 1.4, 4.5, -5.5) }
+    // Arch top (semicircular crown — horizontal cylinder)
+    cylinder { bottom (0, 4.5, -11.0)   top (0, 4.5, -5.5)  radius 1.4 }
+    // Left arrow slit
+    box { min (-2.9, 4.0, -11.0)  max (-2.2, 8.5, -5.5) }
+    // Right arrow slit
+    box { min ( 2.2, 4.0, -11.0)  max ( 2.9, 8.5, -5.5) }
+  }
+}
+// Gatehouse crown merlons
+for i in range(4) {
+  let mx = -2.4 + i * 1.5
+  box { min (mx, 14, -10.5)  max (mx + 0.75, 17, -6.0)  material dark_stone }
+}
+
+// ── Main Keep ─────────────────────────────────────────────────────────────────
+// Tall rectangular tower at the castle's rear — dominates the skyline
+box { min (-3.5, 0, 1.5)  max (3.5, 30, 8.0)  material aged_stone }
+
+// Cap turret — round tower atop the keep
+let keep_mid_z = 4.75
+cylinder { bottom (0, 30, keep_mid_z)  top (0, 35, keep_mid_z)  radius 1.8  material aged_stone }
+cone     { bottom (0, 35, keep_mid_z)  top (0, 43, keep_mid_z)  bottom_radius 2.1  top_radius 0.0  material slate_roof }
+
+// Keep wall merlons (along X, front and back faces)
+for i in range(4) {
+  let mx = -3.0 + i * 1.8
+  box { min (mx, 30, 1.5)  max (mx + 0.9, 33, 8.0)  material aged_stone }
+}
+
+// Cap turret merlons (circular)
+for i in range(8) {
+  let angle = i * 2 * pi / 8
+  let mx = cos(angle) * 2.1
+  let mz = keep_mid_z + sin(angle) * 2.1
+  box { min (mx - 0.3, 35, mz - 0.3)  max (mx + 0.3, 37.5, mz + 0.3)  material aged_stone }
+}
+
+// ── Stone causeway ────────────────────────────────────────────────────────────
+// Narrow bridge crossing the moat to the gatehouse
+box { min (-1.2, 0.0, -14.5)  max (1.2, 0.2, -10.5)  material dark_stone }
