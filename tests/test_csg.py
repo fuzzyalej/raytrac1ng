@@ -497,3 +497,29 @@ def test_parse_fuse_in_non_union_raises():
     """
     with pytest.raises(ParseError):
         parse_source(src)
+
+
+import tempfile, os
+
+
+def test_new_parser_builds_csg_scene():
+    from new_parser import parse_scene
+    src = """
+camera { location (0, 0, -5)  look_at (0, 0, 0)  fov 60 }
+light  { position (4, 8, -4) }
+difference {
+  sphere { center (0, 0, 0)  radius 1.5  color (1, 0, 0) }
+  sphere { center (0, 0, 0)  radius 0.8  color (0, 0, 1) }
+}
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.pow',
+                                     delete=False) as f:
+        f.write(src)
+        tmp = f.name
+    try:
+        scene = parse_scene(tmp)
+        assert len(scene.objects) == 1
+        from shapes import CSGDifference
+        assert isinstance(scene.objects[0], CSGDifference)
+    finally:
+        os.unlink(tmp)

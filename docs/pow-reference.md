@@ -228,6 +228,57 @@ torus {
 }
 ```
 
+### CSG blocks — Constructive Solid Geometry
+
+CSG blocks combine bounded shapes using boolean set operations.
+`Plane` is not allowed as a CSG child.
+
+#### union
+
+```
+union {
+  fuse yes              // optional — suppresses internal seams (default: no)
+  material <name>       // optional material override
+  color (r,g,b)         // or inline fields
+  opacity N
+  reflect N
+  ior     N
+
+  sphere { ... }        // n-ary: any number of child shapes or CSG nodes
+  box    { ... }
+  union  { ... }        // nesting is allowed
+}
+```
+
+#### intersection
+
+```
+intersection {
+  // same optional material fields as union
+  sphere { ... }        // n-ary: at least 2 children required
+  box    { ... }
+}
+```
+
+#### difference
+
+```
+difference {
+  // same optional material fields as union
+  sphere { ... }        // child 1 = A   (exactly 2 children required)
+  box    { ... }        // child 2 = B   (parse error if != 2)
+}
+```
+
+**Material:** If a CSG block specifies material fields, those override the child's
+material per-field (unspecified fields fall back to the hit child's material).
+If no material fields are specified, the material comes entirely from whichever
+child shape was actually intersected.
+
+**fuse:** Only valid on `union`. When `fuse yes`, intervals from touching or
+slightly-overlapping children are merged, removing internal boundary surfaces.
+Essential for transparent glass objects (prevents double-refraction seams).
+
 ### Material field reference (all shapes)
 
 | Field     | Type   | Range      | Default          | Description                            |
