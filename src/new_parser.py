@@ -1,6 +1,7 @@
 """
 Adapter: parses a .pow file using lang_parser and builds a Scene.
 """
+import os
 from pathlib import Path
 
 from lang_parser import (
@@ -9,10 +10,13 @@ from lang_parser import (
     SceneSphere, ScenePlane, SceneBox,
     SceneCylinder, SceneCone, SceneTorus,
     SceneCSGUnion, SceneCSGIntersection, SceneCSGDifference,
+    SceneMesh,
 )
 from scene import Scene, Camera, Light
 from shapes import Sphere, Plane, Box, Cylinder, Cone, Torus
 from shapes import CSGUnion, CSGIntersection, CSGDifference
+from shapes import TriangleMesh
+from obj_loader import load_obj
 from vector import Vec3
 from color import Color
 
@@ -98,6 +102,17 @@ def parse_scene(path: str) -> Scene:
                 reflect=item.reflect,
                 ior=item.ior,
             ))
+
+        elif isinstance(item, SceneMesh):
+            resolved = os.path.join(base_path, item.file)
+            mesh = load_obj(
+                resolved,
+                color=_c(item.color) if item.color is not None else None,
+                opacity=item.opacity,
+                reflect=item.reflect,
+                ior=item.ior,
+            )
+            scene.objects.append(mesh)
 
         else:
             # All bounded shapes (primitives and CSG) go through _build_shape
