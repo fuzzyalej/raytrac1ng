@@ -1161,3 +1161,70 @@ class CSGDifference:
     def bounding_box(self):
         # Conservative: same as A (we can't know what B carved out)
         return self.left.bounding_box()
+
+
+# ---------------------------------------------------------------------------
+# Triangle  (used by TriangleMesh)
+# ---------------------------------------------------------------------------
+
+class Triangle:
+    """A single triangle for mesh rendering.
+
+    v0, v1, v2: Vec3 vertices in world space.
+    n0, n1, n2: optional Vec3 vertex normals for smooth shading.
+    """
+
+    def __init__(self, v0: Vec3, v1: Vec3, v2: Vec3,
+                 n0: Vec3 = None, n1: Vec3 = None, n2: Vec3 = None,
+                 color: Color = None, opacity: float = 1.0,
+                 reflect: float = 0.0, ior: float = 1.0):
+        self.v0 = v0
+        self.v1 = v1
+        self.v2 = v2
+        self.n0 = n0
+        self.n1 = n1
+        self.n2 = n2
+        self.color   = color if color is not None else Color(1.0, 1.0, 1.0)
+        self.opacity = float(opacity)
+        self.reflect = float(reflect)
+        self.ior     = float(ior)
+
+    def hit(self, ray, t_min: float = 0.001, t_max: float = float('inf')) -> Optional[HitRecord]:
+        """Möller–Trumbore ray-triangle intersection."""
+        edge1 = self.v1 - self.v0
+        edge2 = self.v2 - self.v0
+        h = ray.direction.cross(edge2)
+        a = edge1.dot(h)
+        if abs(a) < 1e-8:
+            return None  # ray parallel to triangle
+        f = 1.0 / a
+        s = ray.origin - self.v0
+        u = f * s.dot(h)
+        if u < 0.0 or u > 1.0:
+            return None
+        q = s.cross(edge1)
+        v = f * ray.direction.dot(q)
+        if v < 0.0 or u + v > 1.0:
+            return None
+        t = f * edge2.dot(q)
+        if t < t_min or t > t_max:
+            return None
+        point = ray.origin + ray.direction * t
+        if self.n0 is not None:
+            w = 1.0 - u - v
+            normal = (self.n0 * w + self.n1 * u + self.n2 * v).normalize()
+        else:
+            normal = edge1.cross(edge2).normalize()
+        return HitRecord(t=t, point=point, normal=normal, mat_obj=self)
+
+    def bounding_box(self):
+        from bvh import AABB
+        eps = 1e-4
+        return AABB(
+            Vec3(min(self.v0.x, self.v1.x, self.v2.x) - eps,
+                 min(self.v0.y, self.v1.y, self.v2.y) - eps,
+                 min(self.v0.z, self.v1.z, self.v2.z) - eps),
+            Vec3(max(self.v0.x, self.v1.x, self.v2.x) + eps,
+                 max(self.v0.y, self.v1.y, self.v2.y) + eps,
+                 max(self.v0.z, self.v1.z, self.v2.z) + eps),
+        )
