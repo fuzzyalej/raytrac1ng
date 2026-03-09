@@ -483,3 +483,17 @@ def test_parse_nested_csg():
     u = items[0]
     assert isinstance(u, SceneCSGUnion)
     assert isinstance(u.children[1], SceneCSGDifference)
+
+
+def test_parse_fuse_in_non_union_raises():
+    import pytest
+    from lang_parser import ParseError
+    src = """
+    intersection {
+      fuse yes
+      sphere { center (0,0,0)  radius 1.0 }
+      sphere { center (1,0,0)  radius 1.0 }
+    }
+    """
+    with pytest.raises(ParseError):
+        parse_source(src)

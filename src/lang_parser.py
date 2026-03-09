@@ -669,6 +669,8 @@ class _ProgramParser(Parser):
             key     = key_tok.value
 
             if key == "fuse":
+                if kind != "union":
+                    raise ParseError(f"'fuse' is only valid in union blocks, not {kind!r}")
                 val = self._expect(TT.IDENT).value
                 if val not in ("yes", "no"):
                     raise ParseError(f"fuse value must be 'yes' or 'no', got {val!r}")
