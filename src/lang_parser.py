@@ -128,6 +128,15 @@ class SceneTorus:
 
 
 @dataclass
+class SceneMesh:
+    file:    str
+    color:   tuple = None   # None means use OBJ/MTL per-triangle colors
+    opacity: float = None   # None means use OBJ/MTL per-triangle opacity
+    reflect: float = 0.0
+    ior:     float = 1.0
+
+
+@dataclass
 class SceneCSGUnion:
     children: list
     fuse:     bool  = False
@@ -385,6 +394,7 @@ _BLOCK_KEYWORDS = {
     "camera", "light",
     "sphere", "plane", "box", "cylinder", "cone", "torus",
     "union", "intersection", "difference",
+    "mesh",
 }
 
 _MATERIAL_FIELDS = {"color", "opacity", "reflect", "ior"}
@@ -643,7 +653,7 @@ class _ProgramParser(Parser):
 
         # Build the right scene item
         try:
-            return _build_scene_item(kind, props, merged)
+            return _build_scene_item(kind, props, merged, mat_ref is not None)
         except KeyError as e:
             raise ParseError(f"missing required field {e} in {kind} block")
 
@@ -757,7 +767,7 @@ class _ProgramParser(Parser):
         merged.update({k: v for k, v in props.items() if k in _MATERIAL_FIELDS})
 
         try:
-            return _build_scene_item(kind, props, merged)
+            return _build_scene_item(kind, props, merged, mat_ref is not None)
         except KeyError as e:
             raise ParseError(f"missing required field {e} in {kind} block")
 
@@ -922,7 +932,7 @@ class _FunctionParser(_ProgramParser):
 # _build_scene_item helper
 # ---------------------------------------------------------------------------
 
-def _build_scene_item(kind: str, props: dict, mat: dict):
+def _build_scene_item(kind: str, props: dict, mat: dict, mat_ref_present: bool = False):
     """Convert raw props dict + resolved material into a scene item dataclass."""
     color   = mat["color"]
     opacity = mat["opacity"]
@@ -981,6 +991,16 @@ def _build_scene_item(kind: str, props: dict, mat: dict):
             major_radius=float(props["major_radius"]),
             minor_radius=float(props["minor_radius"]),
             color=color, opacity=opacity, reflect=reflect, ior=ior,
+        )
+    if kind == "mesh":
+        if "file" not in props:
+            raise KeyError("file")
+        return SceneMesh(
+            file=str(props["file"]),
+            color=mat["color"] if ("color" in props or mat_ref_present) else None,
+            opacity=mat["opacity"] if ("opacity" in props or mat_ref_present) else None,
+            reflect=float(mat["reflect"]),
+            ior=float(mat["ior"]),
         )
     raise ParseError(f"unknown block type {kind!r}")
 
