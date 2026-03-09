@@ -164,28 +164,30 @@ def _trace(ray, scene: Scene, depth: int) -> Color:
     if hit is None:
         return BG_COLOR
 
-    surface_color = _shade(hit, obj.color, scene) if obj.ior == 1.0 else Color(0.0, 0.0, 0.0)
+    mat = hit.mat_obj if hit.mat_obj is not None else obj  # CSG material routing
+
+    surface_color = _shade(hit, mat.color, scene) if mat.ior == 1.0 else Color(0.0, 0.0, 0.0)
 
     # Reflection — applied before opacity blend (ior > 1.0 objects use Fresnel instead)
-    if obj.reflect > 0.0 and obj.ior == 1.0 and depth > 0:
+    if mat.reflect > 0.0 and mat.ior == 1.0 and depth > 0:
         D = ray.direction
         N = hit.normal
         reflect_dir = D - N * (2.0 * D.dot(N))
         reflect_origin = hit.point + N * 0.001
         reflect_ray = ReflectionRay(reflect_origin, reflect_dir)
         reflected_color = _trace(reflect_ray, scene, depth - 1)
-        surface_color = (surface_color * (1.0 - obj.reflect)
-                         + reflected_color * obj.reflect).clamp()
+        surface_color = (surface_color * (1.0 - mat.reflect)
+                         + reflected_color * mat.reflect).clamp()
 
     # Opacity / Refraction
-    if obj.opacity >= 1.0 or depth <= 0:
+    if mat.opacity >= 1.0 or depth <= 0:
         return surface_color
 
-    if obj.ior == 1.0:
+    if mat.ior == 1.0:
         # Naive straight-through: backward-compatible for existing scenes
         continuation = Ray(hit.point + ray.direction * 0.002, ray.direction)
         behind_color = _trace(continuation, scene, depth - 1)
-        blended = surface_color * obj.opacity + behind_color * (1.0 - obj.opacity)
+        blended = surface_color * mat.opacity + behind_color * (1.0 - mat.opacity)
         return blended.clamp()
 
     # Physical refraction path (Snell's law + TIR + Schlick Fresnel)
@@ -194,10 +196,10 @@ def _trace(ray, scene: Scene, depth: int) -> Color:
 
     # Determine direction: entering (D·N < 0) or exiting (D·N > 0)
     if D.dot(N) < 0.0:
-        n1, n2 = 1.0, obj.ior
+        n1, n2 = 1.0, mat.ior
         outward_N = N
     else:
-        n1, n2 = obj.ior, 1.0
+        n1, n2 = mat.ior, 1.0
         outward_N = N * -1.0
 
     cos_i = -D.dot(outward_N)

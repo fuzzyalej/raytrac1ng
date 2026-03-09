@@ -342,3 +342,48 @@ def test_difference_requires_exactly_two_children():
     a = Sphere(Vec3(0,0,0), 1.0)
     with pytest.raises(ValueError):
         CSGDifference(a, a, a)   # 3 args not allowed
+
+
+# ---------------------------------------------------------------------------
+# Task 10: Renderer integration smoke tests
+# ---------------------------------------------------------------------------
+
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from renderer import _trace
+from scene import Scene, Camera, Light
+from color import Color
+
+
+def _make_scene(*objects):
+    scene = Scene()
+    scene.camera = Camera(Vec3(0, 3, -9), Vec3(0, 1, 0))
+    scene.lights = [Light(Vec3(4, 8, -4))]
+    scene.objects = list(objects)
+    return scene
+
+
+def test_renderer_traces_csg_union():
+    """A CSGUnion in the scene renders without error and produces a non-background color."""
+    BG = Color(0.05, 0.05, 0.08)
+    a = Sphere(Vec3(0, 1, 0), 0.8, color=Color(1, 0, 0))
+    b = Sphere(Vec3(0.5, 1, 0), 0.8, color=Color(0, 0, 1))
+    u = CSGUnion([a, b])
+    scene = _make_scene(u)
+    ray = VisionRay(Vec3(0, 1, -5), Vec3(0, 0, 1))
+    color = _trace(ray, scene, depth=3)
+    assert color != BG   # hit something
+
+
+def test_renderer_csg_difference_correct_color():
+    """CSGDifference material falls back to A's child color."""
+    big   = Sphere(Vec3(0, 0, 0), 1.5, color=Color(1, 0, 0))   # red
+    small = Sphere(Vec3(0, 0, 0), 0.8, color=Color(0, 0, 1))   # blue
+    diff  = CSGDifference(big, small)
+    scene = _make_scene(diff)
+    # Ray hits the outer shell of 'big' — should be red-ish
+    ray = VisionRay(Vec3(-3, 0, 0), Vec3(1, 0, 0))
+    color = _trace(ray, scene, depth=1)
+    assert color.r > color.b   # red component dominates
