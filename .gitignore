@@ -3,3 +3,4 @@ docs/plans/
 .DS_Store
 *.egg-info/
 .worktrees/
+.worktrees/
