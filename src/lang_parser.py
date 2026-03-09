@@ -127,6 +127,35 @@ class SceneTorus:
     ior:          float = 1.0
 
 
+@dataclass
+class SceneCSGUnion:
+    children: list
+    fuse:     bool  = False
+    color:    tuple = None
+    opacity:  float = None
+    reflect:  float = None
+    ior:      float = None
+
+
+@dataclass
+class SceneCSGIntersection:
+    children: list
+    color:    tuple = None
+    opacity:  float = None
+    reflect:  float = None
+    ior:      float = None
+
+
+@dataclass
+class SceneCSGDifference:
+    left:    object
+    right:   object
+    color:   tuple = None
+    opacity: float = None
+    reflect: float = None
+    ior:     float = None
+
+
 # ---------------------------------------------------------------------------
 # Vec3 helpers
 # ---------------------------------------------------------------------------
@@ -355,6 +384,7 @@ class Parser:
 _BLOCK_KEYWORDS = {
     "camera", "light",
     "sphere", "plane", "box", "cylinder", "cone", "torus",
+    "union", "intersection", "difference",
 }
 
 _MATERIAL_FIELDS = {"color", "opacity", "reflect", "ior"}
@@ -576,6 +606,11 @@ class _ProgramParser(Parser):
         """Parse a named block (sphere, plane, camera, etc.)."""
         kind_tok = self._advance()
         kind = kind_tok.value
+
+        # Route CSG blocks to dedicated parser
+        if kind in ("union", "intersection", "difference"):
+            return self._block_stmt_csg(kind)
+
         self._expect(TT.LBRACE)
 
         props = {}
@@ -607,6 +642,118 @@ class _ProgramParser(Parser):
         merged.update({k: v for k, v in props.items() if k in _MATERIAL_FIELDS})
 
         # Build the right scene item
+        try:
+            return _build_scene_item(kind, props, merged)
+        except KeyError as e:
+            raise ParseError(f"missing required field {e} in {kind} block")
+
+    def _block_stmt_csg(self, kind: str):
+        """Parse a CSG block (union / intersection / difference)."""
+        self._expect(TT.LBRACE)
+
+        fuse    = False
+        color   = None
+        opacity = None
+        reflect = None
+        ior     = None
+        mat_ref = None
+        children = []
+
+        _CHILD_KEYWORDS = {
+            "sphere", "plane", "box", "cylinder", "cone", "torus",
+            "union", "intersection", "difference",
+        }
+
+        while not self._check(TT.RBRACE):
+            key_tok = self._expect(TT.IDENT)
+            key     = key_tok.value
+
+            if key == "fuse":
+                val = self._expect(TT.IDENT).value
+                if val not in ("yes", "no"):
+                    raise ParseError(f"fuse value must be 'yes' or 'no', got {val!r}")
+                fuse = (val == "yes")
+
+            elif key == "material":
+                name_tok = self._expect(TT.IDENT)
+                mat_name = name_tok.value
+                if mat_name not in self._env:
+                    raise ParseError(f"undefined material {mat_name!r}")
+                mat_ref = self._env[mat_name]
+                if not isinstance(mat_ref, dict):
+                    raise ParseError(f"{mat_name!r} is not a material")
+
+            elif key in _MATERIAL_FIELDS:
+                val = self._expr()
+                if key == "color":   color   = val
+                if key == "opacity": opacity = float(val)
+                if key == "reflect": reflect = float(val)
+                if key == "ior":     ior     = float(val)
+
+            elif key in _CHILD_KEYWORDS:
+                child = self._parse_csg_child(key)
+                children.append(child)
+
+            else:
+                raise ParseError(f"unexpected field {key!r} in {kind} block")
+
+        self._expect(TT.RBRACE)
+
+        # Apply mat_ref defaults, inline overrides win
+        if mat_ref:
+            if color   is None: color   = mat_ref.get("color")
+            if opacity is None: opacity = mat_ref.get("opacity")
+            if reflect is None: reflect = mat_ref.get("reflect")
+            if ior     is None: ior     = mat_ref.get("ior")
+
+        if kind == "union":
+            return SceneCSGUnion(children=children, fuse=fuse,
+                                 color=color, opacity=opacity,
+                                 reflect=reflect, ior=ior)
+
+        if kind == "intersection":
+            if len(children) < 2:
+                raise ParseError("intersection requires at least 2 children")
+            return SceneCSGIntersection(children=children,
+                                        color=color, opacity=opacity,
+                                        reflect=reflect, ior=ior)
+
+        if kind == "difference":
+            if len(children) != 2:
+                raise ParseError(
+                    f"difference requires exactly 2 children, got {len(children)}"
+                )
+            return SceneCSGDifference(left=children[0], right=children[1],
+                                      color=color, opacity=opacity,
+                                      reflect=reflect, ior=ior)
+
+    def _parse_csg_child(self, kind: str):
+        """Parse a child of a CSG block: primitive or nested CSG."""
+        _CSG_KINDS = {"union", "intersection", "difference"}
+        if kind in _CSG_KINDS:
+            return self._block_stmt_csg(kind)
+        # Primitive: parse the { ... } block manually
+        self._expect(TT.LBRACE)
+        props   = {}
+        mat_ref = None
+        while not self._check(TT.RBRACE):
+            key_tok = self._expect(TT.IDENT)
+            key     = key_tok.value
+            if key == "material":
+                name_tok = self._expect(TT.IDENT)
+                mat_name = name_tok.value
+                if mat_name not in self._env:
+                    raise ParseError(f"undefined material {mat_name!r}")
+                mat_ref = self._env[mat_name]
+            else:
+                props[key] = self._expr()
+        self._expect(TT.RBRACE)
+
+        merged = dict(_MAT_DEFAULTS)
+        if mat_ref:
+            merged.update(mat_ref)
+        merged.update({k: v for k, v in props.items() if k in _MATERIAL_FIELDS})
+
         try:
             return _build_scene_item(kind, props, merged)
         except KeyError as e:

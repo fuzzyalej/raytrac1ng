@@ -384,3 +384,102 @@ def test_renderer_csg_difference_correct_color():
     ray = VisionRay(Vec3(-3, 0, 0), Vec3(1, 0, 0))
     color = _trace(ray, scene, depth=1)
     assert color.r > color.b   # red component dominates
+
+
+# ---------------------------------------------------------------------------
+# Task 11: Lang parser — CSG dataclasses + _block_stmt_csg()
+# ---------------------------------------------------------------------------
+
+from lang_parser import parse_source, SceneCSGUnion, SceneCSGIntersection, SceneCSGDifference
+
+
+def test_parse_union_block():
+    src = """
+    union {
+      sphere { center (0,1,0)  radius 1.0  color (1,0,0) }
+      box    { min (-1,0,-1)  max (1,2,1)  color (0,1,0) }
+    }
+    """
+    items = parse_source(src)
+    assert len(items) == 1
+    u = items[0]
+    assert isinstance(u, SceneCSGUnion)
+    assert len(u.children) == 2
+    assert u.fuse is False
+
+
+def test_parse_union_fuse():
+    src = """
+    union {
+      fuse yes
+      sphere { center (0,0,0)  radius 1.0 }
+      sphere { center (1,0,0)  radius 1.0 }
+    }
+    """
+    items = parse_source(src)
+    assert items[0].fuse is True
+
+
+def test_parse_intersection_block():
+    src = """
+    intersection {
+      sphere { center (0,0,0)  radius 1.5 }
+      sphere { center (0,0,0)  radius 0.8 }
+    }
+    """
+    items = parse_source(src)
+    assert isinstance(items[0], SceneCSGIntersection)
+    assert len(items[0].children) == 2
+
+
+def test_parse_difference_block():
+    src = """
+    difference {
+      sphere { center (0,0,0)  radius 1.5 }
+      sphere { center (0,0,0)  radius 0.8 }
+    }
+    """
+    items = parse_source(src)
+    assert isinstance(items[0], SceneCSGDifference)
+    assert items[0].left is not None
+    assert items[0].right is not None
+
+
+def test_parse_difference_wrong_arity():
+    import pytest
+    src = """
+    difference {
+      sphere { center (0,0,0)  radius 1.0 }
+      sphere { center (1,0,0)  radius 1.0 }
+      sphere { center (2,0,0)  radius 1.0 }
+    }
+    """
+    with pytest.raises(Exception):
+        parse_source(src)
+
+
+def test_parse_csg_with_material_override():
+    src = """
+    union {
+      color (1, 0, 0)
+      sphere { center (0,0,0)  radius 1.0 }
+    }
+    """
+    items = parse_source(src)
+    assert items[0].color == (1.0, 0.0, 0.0)
+
+
+def test_parse_nested_csg():
+    src = """
+    union {
+      sphere { center (0,0,0)  radius 1.0 }
+      difference {
+        sphere { center (2,0,0)  radius 1.0 }
+        sphere { center (2,0,0)  radius 0.5 }
+      }
+    }
+    """
+    items = parse_source(src)
+    u = items[0]
+    assert isinstance(u, SceneCSGUnion)
+    assert isinstance(u.children[1], SceneCSGDifference)
