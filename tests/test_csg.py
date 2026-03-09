@@ -348,10 +348,6 @@ def test_difference_requires_exactly_two_children():
 # Task 10: Renderer integration smoke tests
 # ---------------------------------------------------------------------------
 
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-
 from renderer import _trace
 from scene import Scene, Camera, Light
 from color import Color
@@ -375,6 +371,7 @@ def test_renderer_traces_csg_union():
     ray = VisionRay(Vec3(0, 1, -5), Vec3(0, 0, 1))
     color = _trace(ray, scene, depth=3)
     assert color != BG   # hit something
+    assert color.r > color.b  # 'a' (red) is the entry point
 
 
 def test_renderer_csg_difference_correct_color():

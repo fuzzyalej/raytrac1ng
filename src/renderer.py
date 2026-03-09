@@ -91,7 +91,8 @@ def _shadow_factor(hit_point: Vec3, light, scene: Scene) -> float:
         for obj in scene.objects:
             hit = obj.hit(shadow_ray, t_min=0.0, t_max=dist_to_light - bias)
             if hit:
-                light_factor *= (1.0 - obj.opacity)
+                mat = hit.mat_obj if hit.mat_obj is not None else obj  # CSG routing
+                light_factor *= (1.0 - mat.opacity)
                 if light_factor < 1e-4:
                     break  # fully shadowed — no need to continue
 
