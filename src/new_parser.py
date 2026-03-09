@@ -67,7 +67,8 @@ def _build_shape(item):
 
 
 def parse_scene(path: str) -> Scene:
-    src = open(path).read()
+    with open(path) as fh:
+        src = fh.read()
     base_path = str(Path(path).parent)
     items = parse_source(src, base_path=base_path)
 
@@ -102,7 +103,7 @@ def parse_scene(path: str) -> Scene:
             # All bounded shapes (primitives and CSG) go through _build_shape
             try:
                 scene.objects.append(_build_shape(item))
-            except ValueError:
-                raise RuntimeError(f"unrecognised scene item: {type(item)}")
+            except ValueError as exc:
+                raise RuntimeError(f"unrecognised scene item: {type(item)}") from exc
 
     return scene
