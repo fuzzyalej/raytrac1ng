@@ -1185,9 +1185,12 @@ class Triangle:
         self.n1 = n1
         self.n2 = n2
         self.color   = color if color is not None else Color(1.0, 1.0, 1.0)
-        self.opacity = float(opacity)
-        self.reflect = float(reflect)
-        self.ior     = float(ior)
+        self.opacity = max(0.0, min(1.0, float(opacity)))
+        self.reflect = max(0.0, min(1.0, float(reflect)))
+        self.ior     = max(1.0, float(ior))
+        normals_provided = [n for n in (n0, n1, n2) if n is not None]
+        if 0 < len(normals_provided) < 3:
+            raise ValueError("Triangle: provide either all three vertex normals or none")
 
     def hit(self, ray, t_min: float = 0.001, t_max: float = float('inf')) -> Optional[HitRecord]:
         """Möller–Trumbore ray-triangle intersection."""
@@ -1209,12 +1212,14 @@ class Triangle:
         t = f * edge2.dot(q)
         if t < t_min or t > t_max:
             return None
-        point = ray.origin + ray.direction * t
+        point = ray.point_at(t)
         if self.n0 is not None:
             w = 1.0 - u - v
             normal = (self.n0 * w + self.n1 * u + self.n2 * v).normalize()
         else:
             normal = edge1.cross(edge2).normalize()
+            if normal.dot(ray.direction) > 0:
+                normal = -normal
         return HitRecord(t=t, point=point, normal=normal, mat_obj=self)
 
     def bounding_box(self):

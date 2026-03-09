@@ -95,3 +95,10 @@ def test_material_custom():
     assert tri.opacity == 0.5
     assert tri.reflect == 0.2
     assert tri.ior == 1.5
+
+
+def test_partial_normals_raises():
+    import pytest
+    n = Vec3(0, 0, -1)
+    with pytest.raises(ValueError):
+        Triangle(V0, V1, V2, n0=n, n1=n)  # missing n2
