@@ -1233,3 +1233,31 @@ class Triangle:
                  max(self.v0.y, self.v1.y, self.v2.y) + eps,
                  max(self.v0.z, self.v1.z, self.v2.z) + eps),
         )
+
+
+# ---------------------------------------------------------------------------
+# TriangleMesh  (per-mesh BVH wrapper)
+# ---------------------------------------------------------------------------
+
+class TriangleMesh:
+    """A collection of Triangle objects with a dedicated internal BVH.
+
+    Acts as a single bounded shape in the scene-level BVH. The internal BVH
+    accelerates ray-triangle intersections within the mesh.
+    """
+
+    def __init__(self, triangles: list):
+        from bvh import BVH, AABB
+        self._triangles = triangles
+        self._bvh = BVH.build(triangles)
+        if self._bvh.root is not None:
+            self._aabb = self._bvh.root.aabb
+        else:
+            self._aabb = AABB(Vec3(0, 0, 0), Vec3(0, 0, 0))
+
+    def hit(self, ray, t_min: float = 0.001, t_max: float = float('inf')) -> Optional[HitRecord]:
+        hit_rec, _obj = self._bvh.hit(ray, t_min, t_max)
+        return hit_rec  # mat_obj already set to Triangle by Triangle.hit()
+
+    def bounding_box(self):
+        return self._aabb
