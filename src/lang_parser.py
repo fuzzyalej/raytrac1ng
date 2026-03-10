@@ -575,8 +575,12 @@ class _ProgramParser(Parser):
                 else:
                     scale = val
             elif key == "rotate":
+                if not isinstance(val, tuple):
+                    raise ParseError("'rotate' requires a vec3, e.g. rotate (0, 45, 0)")
                 rotate = val
             elif key == "translate":
+                if not isinstance(val, tuple):
+                    raise ParseError("'translate' requires a vec3, e.g. translate (1, 0, 0)")
                 translate = val
 
         self._expect(TT.RBRACE)
@@ -693,6 +697,8 @@ class _ProgramParser(Parser):
                 if not isinstance(mat_ref, dict):
                     raise ParseError(f"{mat_name!r} is not a material")
             elif key == "transform":
+                if kind in ("camera", "light"):
+                    raise ParseError(f"'transform' is not supported on {kind!r} blocks")
                 name_tok = self._expect(TT.IDENT)
                 t_name = name_tok.value
                 if t_name not in self._env:

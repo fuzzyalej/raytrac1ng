@@ -133,3 +133,28 @@ def test_csg_without_transform_has_none():
     """
     items = parse_source(src)
     assert items[0].transform is None
+
+
+def test_transform_on_camera_raises():
+    src = """
+    let t = transform { scale 2.0 }
+    camera { location (0,1,0)  look_at (0,0,0)  fov 60  transform t }
+    """
+    with pytest.raises(ParseError, match="camera"):
+        parse_source(src)
+
+def test_transform_on_light_raises():
+    src = """
+    let t = transform { scale 2.0 }
+    light { position (0,10,0)  transform t }
+    """
+    with pytest.raises(ParseError, match="light"):
+        parse_source(src)
+
+def test_rotate_scalar_raises():
+    with pytest.raises(ParseError, match="rotate"):
+        parse_source("let t = transform { rotate 45 }")
+
+def test_translate_scalar_raises():
+    with pytest.raises(ParseError, match="translate"):
+        parse_source("let t = transform { translate 5 }")
