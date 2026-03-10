@@ -1365,8 +1365,8 @@ class TransformedShape:
         t_world = rec.t / d_obj_len
 
         # Transform hit point to world space.
-        mat = self.transform.matrix()
-        world_pt = mat.transform_point(rec.point)
+        fwd_mat  = self.transform.matrix()
+        world_pt = fwd_mat.transform_point(rec.point)
 
         # Normals transform by the transpose of the inverse matrix to remain
         # perpendicular to the surface under non-uniform scale.
@@ -1375,9 +1375,9 @@ class TransformedShape:
 
         # If the inner shape didn't set a mat_obj, use the inner shape itself so
         # the renderer can access material attributes (color, ior, opacity, reflect).
-        mat = rec.mat_obj if rec.mat_obj is not None else self.shape
+        mat_obj = rec.mat_obj if rec.mat_obj is not None else self.shape
         return HitRecord(t=t_world, point=world_pt, normal=world_n,
-                         mat_obj=mat)
+                         mat_obj=mat_obj)
 
     def bounding_box(self):
         """Return a world-space AABB enclosing the transformed child AABB."""
