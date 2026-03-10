@@ -4,8 +4,51 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
-from vector import Vec3
+from vector import Vec3, Matrix4x4
 from color import Color
+
+
+# ---------------------------------------------------------------------------
+# Transform
+# ---------------------------------------------------------------------------
+
+class Transform:
+    """Stores TRS (scale, rotate_deg, translate) components for affine transforms.
+
+    Lazily computes and caches the 4x4 matrix and its inverse so they are only
+    built once per transform instance, regardless of how many rays it processes.
+    Components are kept separate (not baked into a single matrix) to support
+    future per-component animation interpolation.
+    """
+
+    def __init__(self,
+                 scale:     tuple | float = (1.0, 1.0, 1.0),
+                 rotate:    tuple = (0.0, 0.0, 0.0),
+                 translate: tuple = (0.0, 0.0, 0.0)):
+        # Accept scalar for uniform scale
+        if isinstance(scale, (int, float)):
+            scale = (float(scale), float(scale), float(scale))
+        self.scale     = tuple(float(x) for x in scale)
+        self.rotate    = tuple(float(x) for x in rotate)
+        self.translate = tuple(float(x) for x in translate)
+        self._mat: Matrix4x4 | None = None
+        self._inv: Matrix4x4 | None = None
+
+    def matrix(self) -> Matrix4x4:
+        """Return the cached TRS matrix, building it on first call."""
+        if self._mat is None:
+            self._mat = Matrix4x4.from_trs(self.scale, self.rotate, self.translate)
+        return self._mat
+
+    def inverse_matrix(self) -> Matrix4x4:
+        """Return the cached inverse TRS matrix, building it on first call."""
+        if self._inv is None:
+            self._inv = self.matrix().inverse()
+        return self._inv
+
+    def __repr__(self) -> str:
+        return (f"Transform(scale={self.scale}, rotate={self.rotate}, "
+                f"translate={self.translate})")
 
 
 # ---------------------------------------------------------------------------
