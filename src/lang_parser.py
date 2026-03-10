@@ -64,43 +64,47 @@ class Closure:
 
 @dataclass
 class SceneSphere:
-    center:  tuple
-    radius:  float
-    color:   tuple = (1.0, 1.0, 1.0)
-    opacity: float = 1.0
-    reflect: float = 0.0
-    ior:     float = 1.0
+    center:    tuple
+    radius:    float
+    color:     tuple  = (1.0, 1.0, 1.0)
+    opacity:   float  = 1.0
+    reflect:   float  = 0.0
+    ior:       float  = 1.0
+    transform: object = None
 
 
 @dataclass
 class ScenePlane:
-    normal:  tuple
-    offset:  float
-    color:   tuple = (1.0, 1.0, 1.0)
-    opacity: float = 1.0
-    reflect: float = 0.0
-    ior:     float = 1.0
+    normal:    tuple
+    offset:    float
+    color:     tuple  = (1.0, 1.0, 1.0)
+    opacity:   float  = 1.0
+    reflect:   float  = 0.0
+    ior:       float  = 1.0
+    transform: object = None
 
 
 @dataclass
 class SceneBox:
-    min:     tuple
-    max:     tuple
-    color:   tuple = (1.0, 1.0, 1.0)
-    opacity: float = 1.0
-    reflect: float = 0.0
-    ior:     float = 1.0
+    min:       tuple
+    max:       tuple
+    color:     tuple  = (1.0, 1.0, 1.0)
+    opacity:   float  = 1.0
+    reflect:   float  = 0.0
+    ior:       float  = 1.0
+    transform: object = None
 
 
 @dataclass
 class SceneCylinder:
-    bottom:  tuple
-    top:     tuple
-    radius:  float
-    color:   tuple = (1.0, 1.0, 1.0)
-    opacity: float = 1.0
-    reflect: float = 0.0
-    ior:     float = 1.0
+    bottom:    tuple
+    top:       tuple
+    radius:    float
+    color:     tuple  = (1.0, 1.0, 1.0)
+    opacity:   float  = 1.0
+    reflect:   float  = 0.0
+    ior:       float  = 1.0
+    transform: object = None
 
 
 @dataclass
@@ -109,10 +113,11 @@ class SceneCone:
     top:           tuple
     bottom_radius: float
     top_radius:    float
-    color:         tuple = (1.0, 1.0, 1.0)
-    opacity:       float = 1.0
-    reflect:       float = 0.0
-    ior:           float = 1.0
+    color:         tuple  = (1.0, 1.0, 1.0)
+    opacity:       float  = 1.0
+    reflect:       float  = 0.0
+    ior:           float  = 1.0
+    transform:     object = None
 
 
 @dataclass
@@ -121,48 +126,60 @@ class SceneTorus:
     axis:         tuple
     major_radius: float
     minor_radius: float
-    color:        tuple = (1.0, 1.0, 1.0)
-    opacity:      float = 1.0
-    reflect:      float = 0.0
-    ior:          float = 1.0
+    color:        tuple  = (1.0, 1.0, 1.0)
+    opacity:      float  = 1.0
+    reflect:      float  = 0.0
+    ior:          float  = 1.0
+    transform:    object = None
 
 
 @dataclass
 class SceneMesh:
-    file:    str
-    color:   tuple | None = None   # None = use OBJ/MTL per-triangle colors
-    opacity: float | None = None   # None = use OBJ/MTL per-triangle opacity
-    reflect: float        = 0.0
-    ior:     float        = 1.0
+    file:      str
+    color:     tuple | None = None   # None = use OBJ/MTL per-triangle colors
+    opacity:   float | None = None   # None = use OBJ/MTL per-triangle opacity
+    reflect:   float        = 0.0
+    ior:       float        = 1.0
+    transform: object       = None
+
+
+@dataclass
+class SceneTransform:
+    scale:     tuple = (1.0, 1.0, 1.0)
+    rotate:    tuple = (0.0, 0.0, 0.0)   # XYZ euler degrees
+    translate: tuple = (0.0, 0.0, 0.0)
 
 
 @dataclass
 class SceneCSGUnion:
-    children: list
-    fuse:     bool  = False
-    color:    tuple = None
-    opacity:  float = None
-    reflect:  float = None
-    ior:      float = None
+    children:  list
+    fuse:      bool   = False
+    color:     tuple  = None
+    opacity:   float  = None
+    reflect:   float  = None
+    ior:       float  = None
+    transform: object = None
 
 
 @dataclass
 class SceneCSGIntersection:
-    children: list
-    color:    tuple = None
-    opacity:  float = None
-    reflect:  float = None
-    ior:      float = None
+    children:  list
+    color:     tuple  = None
+    opacity:   float  = None
+    reflect:   float  = None
+    ior:       float  = None
+    transform: object = None
 
 
 @dataclass
 class SceneCSGDifference:
-    left:    object
-    right:   object
-    color:   tuple = None
-    opacity: float = None
-    reflect: float = None
-    ior:     float = None
+    left:      object
+    right:     object
+    color:     tuple  = None
+    opacity:   float  = None
+    reflect:   float  = None
+    ior:       float  = None
+    transform: object = None
 
 
 # ---------------------------------------------------------------------------
@@ -507,6 +524,13 @@ class _ProgramParser(Parser):
             self._env[name] = mat
             return []
 
+        # let x = transform { ... }
+        if self._match_ident("transform"):
+            self._advance()   # consume 'transform'
+            t = self._transform_block()
+            self._env[name] = t
+            return []
+
         # let x = <expr>
         val = self._expr()
         self._env[name] = val
@@ -528,6 +552,35 @@ class _ProgramParser(Parser):
             props[key] = val
         self._expect(TT.RBRACE)
         return props
+
+    _TRANSFORM_FIELDS = {"scale", "rotate", "translate"}
+
+    def _transform_block(self) -> SceneTransform:
+        """Parse transform { ... } and return a SceneTransform."""
+        self._expect(TT.LBRACE)
+        scale     = (1.0, 1.0, 1.0)
+        rotate    = (0.0, 0.0, 0.0)
+        translate = (0.0, 0.0, 0.0)
+
+        while not self._check(TT.RBRACE):
+            key_tok = self._expect(TT.IDENT)
+            key = key_tok.value
+            if key not in self._TRANSFORM_FIELDS:
+                raise ParseError(f"unknown transform field {key!r}")
+            val = self._expr()
+            if key == "scale":
+                # Accept scalar (uniform) or vec3
+                if isinstance(val, (int, float)):
+                    scale = (float(val), float(val), float(val))
+                else:
+                    scale = val
+            elif key == "rotate":
+                rotate = val
+            elif key == "translate":
+                translate = val
+
+        self._expect(TT.RBRACE)
+        return SceneTransform(scale=scale, rotate=rotate, translate=translate)
 
     def _import_stmt(self) -> list:
         self._advance()  # consume 'import'
@@ -639,6 +692,15 @@ class _ProgramParser(Parser):
                 mat_ref = self._env[mat_name]
                 if not isinstance(mat_ref, dict):
                     raise ParseError(f"{mat_name!r} is not a material")
+            elif key == "transform":
+                name_tok = self._expect(TT.IDENT)
+                t_name = name_tok.value
+                if t_name not in self._env:
+                    raise ParseError(f"undefined transform {t_name!r}")
+                t_val = self._env[t_name]
+                if not isinstance(t_val, SceneTransform):
+                    raise ParseError(f"{t_name!r} is not a transform")
+                props["__transform__"] = t_val
             else:
                 val = self._expr()
                 props[key] = val
@@ -652,22 +714,27 @@ class _ProgramParser(Parser):
         merged.update({k: v for k, v in props.items() if k in _MATERIAL_FIELDS})
 
         # Build the right scene item
+        transform_val = props.pop("__transform__", None)
         try:
-            return _build_scene_item(kind, props, merged, mat_ref is not None)
+            item = _build_scene_item(kind, props, merged, mat_ref is not None)
         except KeyError as e:
             raise ParseError(f"missing required field {e} in {kind} block")
+        if transform_val is not None:
+            item.transform = transform_val
+        return item
 
     def _block_stmt_csg(self, kind: str):
         """Parse a CSG block (union / intersection / difference)."""
         self._expect(TT.LBRACE)
 
-        fuse    = False
-        color   = None
-        opacity = None
-        reflect = None
-        ior     = None
-        mat_ref = None
-        children = []
+        fuse          = False
+        color         = None
+        opacity       = None
+        reflect       = None
+        ior           = None
+        mat_ref       = None
+        transform_val = None
+        children      = []
 
         _CHILD_KEYWORDS = {
             "sphere", "plane", "box", "cylinder", "cone", "torus",
@@ -695,6 +762,16 @@ class _ProgramParser(Parser):
                 if not isinstance(mat_ref, dict):
                     raise ParseError(f"{mat_name!r} is not a material")
 
+            elif key == "transform":
+                name_tok = self._expect(TT.IDENT)
+                t_name = name_tok.value
+                if t_name not in self._env:
+                    raise ParseError(f"undefined transform {t_name!r}")
+                t_val = self._env[t_name]
+                if not isinstance(t_val, SceneTransform):
+                    raise ParseError(f"{t_name!r} is not a transform")
+                transform_val = t_val
+
             elif key in _MATERIAL_FIELDS:
                 val = self._expr()
                 if key == "color":   color   = val
@@ -721,14 +798,16 @@ class _ProgramParser(Parser):
         if kind == "union":
             return SceneCSGUnion(children=children, fuse=fuse,
                                  color=color, opacity=opacity,
-                                 reflect=reflect, ior=ior)
+                                 reflect=reflect, ior=ior,
+                                 transform=transform_val)
 
         if kind == "intersection":
             if len(children) < 2:
                 raise ParseError("intersection requires at least 2 children")
             return SceneCSGIntersection(children=children,
                                         color=color, opacity=opacity,
-                                        reflect=reflect, ior=ior)
+                                        reflect=reflect, ior=ior,
+                                        transform=transform_val)
 
         if kind == "difference":
             if len(children) != 2:
@@ -737,7 +816,8 @@ class _ProgramParser(Parser):
                 )
             return SceneCSGDifference(left=children[0], right=children[1],
                                       color=color, opacity=opacity,
-                                      reflect=reflect, ior=ior)
+                                      reflect=reflect, ior=ior,
+                                      transform=transform_val)
 
     def _parse_csg_child(self, kind: str):
         """Parse a child of a CSG block: primitive or nested CSG."""
@@ -757,6 +837,15 @@ class _ProgramParser(Parser):
                 if mat_name not in self._env:
                     raise ParseError(f"undefined material {mat_name!r}")
                 mat_ref = self._env[mat_name]
+            elif key == "transform":
+                name_tok = self._expect(TT.IDENT)
+                t_name = name_tok.value
+                if t_name not in self._env:
+                    raise ParseError(f"undefined transform {t_name!r}")
+                t_val = self._env[t_name]
+                if not isinstance(t_val, SceneTransform):
+                    raise ParseError(f"{t_name!r} is not a transform")
+                props["__transform__"] = t_val
             else:
                 props[key] = self._expr()
         self._expect(TT.RBRACE)
@@ -766,10 +855,14 @@ class _ProgramParser(Parser):
             merged.update(mat_ref)
         merged.update({k: v for k, v in props.items() if k in _MATERIAL_FIELDS})
 
+        transform_val = props.pop("__transform__", None)
         try:
-            return _build_scene_item(kind, props, merged, mat_ref is not None)
+            item = _build_scene_item(kind, props, merged, mat_ref is not None)
         except KeyError as e:
             raise ParseError(f"missing required field {e} in {kind} block")
+        if transform_val is not None:
+            item.transform = transform_val
+        return item
 
     def _call_closure(self, closure: Closure, args: list) -> tuple:
         """Execute a closure. Returns (scene_items, return_value)."""
