@@ -86,3 +86,16 @@ def test_normal_world_space_translated():
     rec = ts.hit(ray, 0.001, 1e9)
     # Front face normal points towards camera → z ≈ -1
     assert rec.normal.z == pytest.approx(-1.0, abs=1e-4)
+
+def test_normal_non_uniform_scale():
+    """Normal must be transformed by inv.T (not forward matrix) under non-uniform scale."""
+    # Sphere scaled 3x on X only. Hit from above straight down.
+    # The top of the ellipsoid is at y=1 world-space.
+    # The normal at the top must still point up (+Y), not be skewed by X scale.
+    t = Transform(scale=(3, 1, 1))
+    ts = TransformedShape(_sphere(), t)
+    ray = _ray(0, 5, 0,  0, -1, 0)
+    rec = ts.hit(ray, 0.001, 1e9)
+    assert rec is not None
+    assert rec.normal.y == pytest.approx(1.0, abs=1e-4)
+    assert abs(rec.normal.x) < 1e-4

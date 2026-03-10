@@ -61,3 +61,7 @@ def test_rotate_wrong_arity_raises():
 def test_translate_wrong_arity_raises():
     with pytest.raises(ValueError, match="translate"):
         Transform(translate=(1,))
+
+def test_scale_wrong_arity_raises():
+    with pytest.raises(ValueError, match="scale"):
+        Transform(scale=(1, 2))

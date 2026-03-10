@@ -33,6 +33,8 @@ class Transform:
         self.scale     = tuple(float(x) for x in scale)
         self.rotate    = tuple(float(x) for x in rotate)
         self.translate = tuple(float(x) for x in translate)
+        if len(self.scale) != 3:
+            raise ValueError(f"Transform: scale must have 3 components, got {len(self.scale)}")
         if len(self.rotate) != 3:
             raise ValueError(f"Transform: rotate must have 3 components, got {len(self.rotate)}")
         if len(self.translate) != 3:
@@ -1335,6 +1337,9 @@ class TransformedShape:
         self.shape     = shape
         self.transform = transform
 
+    def __repr__(self) -> str:
+        return f"TransformedShape(shape={self.shape!r}, transform={self.transform!r})"
+
     def hit(self, ray, t_min: float, t_max: float):
         from ray import VisionRay as _VisionRay
         inv = self.transform.inverse_matrix()
@@ -1347,9 +1352,10 @@ class TransformedShape:
         if d_obj_len < 1e-12:
             return None
 
-        # VisionRay normalises direction internally, so t values from child.hit()
-        # are in terms of the normalised object-space direction.  Scale t bounds
-        # accordingly so world-space constraints are preserved.
+        # VisionRay.__init__ normalises direction to unit length.
+        # t values from the child are in terms of that normalised direction.
+        # Scaling bounds by d_obj_len and dividing returned t by d_obj_len recovers
+        # correct world-space t. This relies on VisionRay normalising internally.
         obj_ray = _VisionRay(o_obj, d_obj_raw)
         rec = self.shape.hit(obj_ray, t_min * d_obj_len, t_max * d_obj_len)
         if rec is None:
@@ -1393,12 +1399,11 @@ class TransformedShape:
             Vec3(max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)),
         )
 
-    def hit_intervals(self, ray):
+    def hit_intervals(self, ray, t_min: float = 1e-9, t_max: float = float('inf')):
         """CSG interval interface -- delegates to wrapped shape in object space."""
         if not hasattr(self.shape, 'hit_intervals'):
             return []
         from ray import VisionRay as _VisionRay
-        from shapes import HitInterval
         inv = self.transform.inverse_matrix()
         o_obj     = inv.transform_point(ray.origin)
         d_obj_raw = inv.transform_direction(ray.direction)
@@ -1406,8 +1411,7 @@ class TransformedShape:
         if d_obj_len < 1e-12:
             return []
         obj_ray  = _VisionRay(o_obj, d_obj_raw)
-        intervals = self.shape.hit_intervals(obj_ray)
-        mat  = self.transform.matrix()
+        intervals = self.shape.hit_intervals(obj_ray, t_min * d_obj_len, t_max * d_obj_len)
         inv_T = inv.transpose()
         result = []
         for iv in intervals:
