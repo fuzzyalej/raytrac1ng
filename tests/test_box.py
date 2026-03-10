@@ -4,6 +4,7 @@ from shapes import Box, HitRecord
 from vector import Vec3
 from ray import VisionRay
 from color import Color
+from material import Material
 
 
 def make_ray(ox, oy, oz, dx, dy, dz):
@@ -62,17 +63,17 @@ def test_box_ray_from_inside_exits_correct_face():
 def test_box_default_material():
     """Default material: white, fully opaque, no reflection."""
     box = Box(Vec3(0, 0, 0), Vec3(1, 1, 1))
-    assert box.color == Color(1.0, 1.0, 1.0)
-    assert box.opacity == 1.0
-    assert box.reflect == 0.0
-    assert box.ior == 1.0
+    assert box.material.color == Color(1.0, 1.0, 1.0)
+    assert box.material.opacity == 1.0
+    assert box.material.reflect == 0.0
+    assert box.material.ior == 1.0
 
 
 def test_box_custom_material():
     """Custom material values are stored correctly."""
     box = Box(Vec3(0, 0, 0), Vec3(1, 1, 1),
-              color=Color(1, 0, 0), opacity=0.5, reflect=0.3, ior=1.5)
-    assert box.color == Color(1, 0, 0)
-    assert abs(box.opacity - 0.5) < 1e-6
-    assert abs(box.reflect - 0.3) < 1e-6
-    assert abs(box.ior - 1.5) < 1e-6
+              material=Material(color=Color(1, 0, 0), opacity=0.5, reflect=0.3, ior=1.5))
+    assert box.material.color == Color(1, 0, 0)
+    assert abs(box.material.opacity - 0.5) < 1e-6
+    assert abs(box.material.reflect - 0.3) < 1e-6
+    assert abs(box.material.ior - 1.5) < 1e-6

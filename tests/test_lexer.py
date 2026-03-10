@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from lexer import tokenise, TT, LexError
+from parsers.pow_lexer import tokenise, TT, LexError
 import pytest
 
 def test_empty():

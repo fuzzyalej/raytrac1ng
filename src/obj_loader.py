@@ -4,6 +4,7 @@ import os
 from color import Color
 from vector import Vec3
 from shapes import Triangle, TriangleMesh
+from material import Material
 
 
 def _parse_mtl(path: str) -> dict[str, dict]:
@@ -129,28 +130,32 @@ def load_obj(path: str,
                         n2 = normals[cni] if cni is not None else None
 
                         try:
+                            tri_mat = Material(color=tri_color, opacity=tri_opacity,
+                                               reflect=reflect, ior=ior)
                             triangles.append(Triangle(
                                 vertices[ai], vertices[bi], vertices[ci],
                                 n0=n0, n1=n1, n2=n2,
-                                color=tri_color, opacity=tri_opacity,
-                                reflect=reflect, ior=ior,
+                                material=tri_mat,
                             ))
                         except ValueError:
                             # Mixed normal specification — fall back to flat shading for this face
+                            tri_mat = Material(color=tri_color, opacity=tri_opacity,
+                                               reflect=reflect, ior=ior)
                             triangles.append(Triangle(
                                 vertices[ai], vertices[bi], vertices[ci],
-                                color=tri_color, opacity=tri_opacity,
-                                reflect=reflect, ior=ior,
+                                material=tri_mat,
                             ))
     except OSError as exc:
         raise OSError(f"load_obj: cannot open '{os.path.abspath(path)}'") from exc
 
     # Apply color/opacity override (reflect/ior already baked per-triangle above)
-    if color is not None:
+    if color is not None or opacity is not None:
         for tri in triangles:
-            tri.color = color
-    if opacity is not None:
-        for tri in triangles:
-            tri.opacity = opacity
+            tri.material = Material(
+                color   = color   if color   is not None else tri.material.color,
+                opacity = opacity if opacity is not None else tri.material.opacity,
+                reflect = tri.material.reflect,
+                ior     = tri.material.ior,
+            )
 
     return TriangleMesh(triangles)

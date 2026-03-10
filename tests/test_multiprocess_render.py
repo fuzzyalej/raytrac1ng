@@ -4,7 +4,9 @@ from scene import Scene, Camera, Light
 from shapes import Sphere
 from vector import Vec3
 from color import Color
-from renderer import render, _render_row_chunk
+from material import Material
+from rendering import render
+from rendering.renderer import _render_row_chunk
 
 
 def _simple_scene() -> Scene:
@@ -12,7 +14,7 @@ def _simple_scene() -> Scene:
     s = Scene()
     s.camera = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0), fov=60)
     s.lights = [Light(position=Vec3(5, 10, -5))]  # point light (radius=0)
-    s.objects = [Sphere(Vec3(0, 0, 0), 1.0, color=Color(1, 0, 0))]
+    s.objects = [Sphere(Vec3(0, 0, 0), 1.0, material=Material(color=Color(1, 0, 0)))]
     return s
 
 

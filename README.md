@@ -1,34 +1,24 @@
-# Mini Raytracer — Documentation
+# Raytrac1ng - A small AI experiment
 
-**Version:** v1.2
-**Last updated:** 2026-03-05
-
----
-
-## Changelog
-
-### v1.3 — 2026-03-10
-- Transform system: `transform { scale rotate translate }` block wraps any shape or CSG node with a full affine transform
-- Supports non-uniform scaling, arbitrary rotation, and translation; reusable across multiple shapes
-
-### v1.2 — 2026-03-05
-- SAH BVH spatial acceleration; automatic for all scenes — no scene changes needed
-- All bounded shapes (`Sphere`, `Box`, `Cylinder`, `Cone`, `Torus`) participate in the BVH
-- `Plane` (infinite/unbounded) is always tested linearly outside the BVH
-
-### v1.1 — 2026-03-04
-- POW language: functions (`fn`), conditionals (`if`/`else if`/`else`)
-
-### v1.0 — 2026-03-03
-- POW scene language with variables, loops, materials, imports
+**Version:** v1.3
+**Last updated:** 2026-03-10
 
 ---
 
 ## Overview
 
-A pure-Python raytracer that reads a custom `.pov` scene description file and outputs an RGB PNG image. No external raytracing libraries are used — all intersection math and shading is implemented from scratch. The only external dependency is **Pillow** for image output.
+A pure-Python raytracer that reads a scene description file and outputs an RGB PNG image. No external raytracing libraries are used — all intersection math and shading is implemented from scratch. The only external dependency is **Pillow** for image output.
 
-It supports Lambertian diffuse shading with soft shadows from sphere area lights, per-object opacity with alpha blending, mirror reflections via the `reflect` field, physically-based refractions (Snell's law + Fresnel) via the `ior` field, and a custom `.pov` scene format.
+Two scene formats are supported: the legacy `.pov` block format and the modern `.pow` scripting language (variables, loops, functions, materials, imports, CSG, transforms). Scenes are accelerated by a SAH-based BVH tree. Supported primitives: sphere, plane, box, cylinder, cone, torus, OBJ mesh, and CSG composites (union, intersection, difference). Rendering features include Lambertian diffuse shading, soft shadows from area lights, per-object opacity, mirror reflections, physically-based refractions (Snell's law + Fresnel), anti-aliasing, and affine transforms (scale, rotate, translate) on any shape or CSG node.
+
+---
+
+## Documentation
+
+| Reference | Description |
+|-----------|-------------|
+| **[docs/pov-reference.md](docs/pov-reference.md)** | Legacy `.pov` format — block syntax, all six primitives, named colors, material fields |
+| **[docs/pow-reference.md](docs/pow-reference.md)** | Modern `.pow` scripting language — variables, loops, functions, materials, imports, CSG, transforms |
 
 ---
 
@@ -37,12 +27,12 @@ It supports Lambertian diffuse shading with soft shadows from sphere area lights
 ### Rendering Pipeline
 
 ```
-.pow file → lang_parser → Scene (camera, lights, objects)
-.pov file → parser      ↗
-                          ↓
-                      Renderer
-                          ↓
-              For each pixel (x, y):
+.pow file → parsers.parse() → Scene (camera, lights, objects)
+.pov file → parsers.parse() ↗
+                               ↓
+                          rendering.render()
+                               ↓
+               For each pixel (x, y):
                 1. Camera generates a VisionRay through the pixel
                 2. VisionRay is tested against every object in the scene
                 3. The closest intersection (smallest positive t) wins
@@ -59,7 +49,7 @@ The raytracer uses typed rays to distinguish their purpose:
 | Ray Type | Purpose | Status |
 |----------|---------|--------|
 | **VisionRay** | Camera → pixel, determines visibility | Implemented |
-| **ShadowRay** | Hit point → light, determines if in shadow | Implemented |
+| **ShadowRay** | Hit point → light, determines if in shadow | Plain `Ray` base class (no subclass) |
 | **ReflectionRay** | Hit point → reflected direction | Implemented |
 | **RefractionRay** | Hit point → Snell's-law transmitted direction | Implemented |
 
@@ -174,51 +164,54 @@ All primitives use a `t_min` (default 0.001) to avoid self-intersection artifact
 ```
 raytrac1ng/
 ├── src/
-│   ├── vector.py       Vec3 — 3D math
-│   ├── color.py        Color — RGB arithmetic + named palette
-│   ├── ray.py          Ray types (VisionRay, ReflectionRay, RefractionRay)
-│   ├── shapes.py       HitRecord + all primitives (Sphere, Plane, Box, Cylinder, Cone, Torus)
-│   ├── scene.py        Camera, Light, Scene container
-│   ├── bvh.py          SAH BVH spatial acceleration (AABB, BVHNode, BVH)
-│   ├── renderer.py     Core render loop and shading
-│   ├── parser.py       .pov scene file parser (legacy)
-│   ├── lexer.py        POW language lexer
-│   ├── lang_parser.py  POW recursive-descent parser + evaluator
-│   └── new_parser.py   POW→Scene adapter
+│   ├── material.py         Shared Material dataclass (color, opacity, reflect, ior)
+│   ├── color.py            Color RGB arithmetic + named palette
+│   ├── ray.py              Ray types (VisionRay, ReflectionRay, RefractionRay)
+│   ├── vector.py           Vec3 + Matrix4x4 (3D math)
+│   ├── scene.py            Camera, Light, Scene container
+│   ├── bvh.py              SAH BVH spatial acceleration
+│   ├── obj_loader.py       OBJ/MTL file loader → TriangleMesh
+│   ├── shapes/
+│   │   ├── __init__.py     Re-exports all public names (backward compat)
+│   │   ├── primitives.py   Sphere, Plane, Box, Cylinder, Cone, Torus, HitRecord, HitInterval
+│   │   ├── csg.py          CSGUnion, CSGIntersection, CSGDifference
+│   │   ├── mesh.py         Triangle, TriangleMesh
+│   │   └── transform.py    Transform, TransformedShape
+│   ├── rendering/
+│   │   ├── __init__.py     Re-exports render()
+│   │   ├── renderer.py     Orchestration: RenderContext, BVH build, worker dispatch
+│   │   ├── shading.py      Lambertian shading, soft shadow computation
+│   │   └── physics.py      Snell's law refraction, Schlick Fresnel
+│   └── parsers/
+│       ├── __init__.py     parse(path) → Scene (dispatches by extension)
+│       ├── pov.py          Legacy .pov block-format parser
+│       ├── pow_lexer.py    .pow language tokenizer
+│       ├── pow_parser.py   .pow recursive-descent parser + evaluator
+│       └── pow_adapter.py  POW→Scene adapter (dataclasses → engine objects)
 ├── tests/
-│   ├── conftest.py   Adds src/ to sys.path for pytest
+│   ├── conftest.py         Adds src/ to sys.path for pytest
 │   └── test_*.py
 ├── examples/
-│   ├── 01-basic.pov / .png
-│   ├── 02-colors.pov / .png
-│   ├── 03-transparency.pov / .png
-│   ├── 04-shadows.pov / .png
-│   ├── 05-two-lights.pov / .png
-│   ├── 06-reflections.pov / .png
-│   ├── 07-refractions.pov / .png
-│   ├── 08-shapes.pov / .png
-│   ├── 09-mecha.pov / .png
-│   ├── 10-pow-loops.pow / .png   (POW: variables + for loops)
-│   ├── 11-pow-materials.pow / .png (POW: materials + all shapes)
+│   └── models/
+│       └── boot.obj        Example mesh .OBJ file
 │   └── materials/
-│       └── standard.pow          Shared material library
+│       └── standard.pow    Shared material library
 ├── docs/
-│   ├── pow-reference.md  POW language reference manual
-│   └── plans/            Implementation plans
-├── main.py           CLI entry point
-└── README.md
+│   ├── pov-reference.md    Legacy .pov format reference manual
+│   ├── pow-reference.md    POW scripting language reference manual
+│   └── plans/              Implementation and design plans
+├── main.py                 CLI entry point
+└── README.md               This file
 ```
 
 ### Module Details
 
-#### `vector.py` — Vec3
+#### `vector.py` — Vec3, Matrix4x4
 
-The foundation of all math in the raytracer. A 3D vector class with:
+The foundation of all math in the raytracer.
 
-- Arithmetic operators: `+`, `-`, `*` (scalar), `/` (scalar), unary `-`
-- Vector operations: `dot()`, `cross()`, `normalize()`, `length()`, `length_squared()`
-- Uses `__slots__` for memory efficiency
-- No external dependencies (no numpy)
+- **`Vec3`**: 3D vector with arithmetic operators (`+`, `-`, `*`, `/`, unary `-`), `dot()`, `cross()`, `normalize()`, `length()`, `length_squared()`. Uses `__slots__` for memory efficiency. No numpy.
+- **`Matrix4x4`**: Row-major 4×4 matrix. `from_trs(scale, rotate_deg, translate)` builds a combined TRS matrix (Scale → Rotate XYZ → Translate). `transform_point()` applies the full transform (including translation); `transform_direction()` applies only the linear part. `inverse()` via Gauss-Jordan elimination with partial pivoting. `transpose()`. Used by `Transform` and `TransformedShape`.
 
 #### `color.py` — Color
 
@@ -232,19 +225,37 @@ The foundation of all math in the raytracer. A 3D vector class with:
 - **`ReflectionRay`**: Mirror reflection rays (direction: `D − 2(D·N)N`).
 - **`RefractionRay`**: Snell's-law refraction rays (direction computed by `_refract()` in `renderer.py`).
 
-#### `shapes.py` — Geometric Primitives
+#### `material.py` — Material
 
-- **`HitRecord`**: Dataclass holding intersection info — `t` (distance), `point` (world-space position), `normal` (surface normal at hit).
-- **`Sphere`**: Defined by `center` and `radius`. Implements `hit(ray)` using the quadratic formula.
-- **`Plane`**: Defined by `normal` and `offset`. Implements `hit(ray)` using ray-plane intersection.
-- **`Box`**: Axis-aligned bounding box defined by `min` and `max` corners. Uses the slab intersection method; normals are derived from which slab face was hit.
-- **`Cylinder`**: Capped cylinder defined by `bottom`, `top`, and `radius`. Decomposes the ray into axial and perpendicular components for intersection; closed disk caps are tested separately.
-- **`Cone`**: Generalised frustum defined by `bottom`, `top`, `bottom_radius`, and `top_radius`. Setting `top_radius 0.0` gives a true cone apex.
-- **`Torus`**: Ring defined by `center`, `axis`, `major_radius`, and `minor_radius`. Solved analytically via Ferrari's quartic method.
-- All shape classes support optional `color`, `opacity`, `reflect`, and `ior` material fields.
-- **`TransformedShape`**: Wraps any shape (or CSG node) with a 4×4 affine transform. The ray is inverse-transformed into the shape's local space for intersection; the resulting normal is multiplied by the transposed inverse matrix and renormalised. Supports non-uniform scaling, arbitrary rotation, and translation.
+- **`Material`**: Dataclass with `color` (Color), `opacity` (float), `reflect` (float), `ior` (float). Validated in `__post_init__`: opacity and reflect clamped to [0, 1], ior clamped to minimum 1.0. All shapes store a single `Material` instance rather than four loose fields.
 
-All shapes (sphere, box, cylinder, cone, torus, mesh, union, intersection, difference) accept a `transform` property for non-uniform scaling, rotation, and translation.
+#### `shapes/primitives.py` — Primitives
+
+- **`HitRecord`**: Holds intersection info — `t` (distance), `point` (world-space position), `normal` (surface normal), `mat_obj` (material source object).
+- **`HitInterval`**: Holds an enter/exit interval for CSG operations — `t_enter`, `t_exit`, enter/exit normals, and the material source for each face. All bounded shapes implement `hit_intervals()` returning a list of `HitInterval`.
+- **`Sphere`**: Quadratic intersection via `|P − C|² = r²`.
+- **`Plane`**: Defined by `normal` and `offset`; `t = (offset − O·N) / D·N`.
+- **`Box`**: AABB slab intersection; normal derived from the entry slab.
+- **`Cylinder`**: Capped arbitrary-axis cylinder; quadratic on perpendicular ray component; disk caps.
+- **`Cone`**: Generalised frustum (`bottom_radius`/`top_radius`); slope-modified quadratic; `top_radius 0.0` = true cone apex.
+- **`Torus`**: Ring defined by `center`, `axis`, `major_radius`, `minor_radius`. Solved analytically via Ferrari's quartic.
+- All primitive shape classes store a single `Material` instance for material properties.
+
+#### `shapes/csg.py` — CSG
+
+- **`CSGUnion`**: Boolean union of two or more shapes using `hit_intervals()`. Optional `fuse` mode blends materials at the boundary.
+- **`CSGIntersection`**: Boolean intersection — keeps only the region inside all children.
+- **`CSGDifference`**: Boolean difference — subtracts the right shape from the left.
+
+#### `shapes/mesh.py` — Mesh
+
+- **`Triangle`**: Single triangle defined by three vertices; Möller-Trumbore intersection; interpolated vertex normals when available.
+- **`TriangleMesh`**: Collection of `Triangle` objects loaded from an OBJ file, accelerated internally by a BVH. Supports per-face and per-vertex normals.
+
+#### `shapes/transform.py` — Transforms
+
+- **`Transform`**: Stores `scale` (3-tuple), `rotate` (XYZ Euler degrees, 3-tuple), and `translate` (3-tuple). Lazily builds and caches the combined `Matrix4x4` and its inverse.
+- **`TransformedShape`**: Wraps any shape (or CSG node) with a `Transform`. The ray is inverse-transformed into local space for intersection; the hit normal is corrected via the transposed inverse matrix (`inv.T`) to remain perpendicular under non-uniform scale.
 
 #### `scene.py` — Scene Graph
 
@@ -252,230 +263,38 @@ All shapes (sphere, box, cylinder, cone, torus, mesh, union, intersection, diffe
 - **`Light`**: Holds a `position` (Vec3), `radius` (float, default 0.0 = point light), and `samples` (int, default 16). Used for diffuse shading and shadow computation.
 - **`Scene`**: Container dataclass holding a camera, a list of lights, and a list of objects.
 
-#### `parser.py` — Scene File Parser
+#### `obj_loader.py` — OBJ/MTL Mesh Loader
 
-Reads the custom `.pov` format (see Scene File Format below). Uses regex to extract blocks (`camera { ... }`, `sphere { ... }`, etc.) and parse their key-value contents. Supports `//` single-line comments.
+Parses Wavefront `.obj` and `.mtl` files and returns a `TriangleMesh`. Handles triangulated faces (`f v1 v2 v3`), per-vertex normals (`vn`), and multi-material meshes via `.mtl` `newmtl`/`Kd`/`d`/`Tr` directives. Per-face material overrides `color`/`opacity`. Accepts optional `color`, `opacity`, `reflect`, and `ior` overrides from the scene file.
 
-#### `renderer.py` — Render Loop
+#### `parsers/pow_adapter.py` — POW→Scene Adapter
 
-Uses a recursive `_trace()` helper (max depth: 8). For each hit it:
+Bridges `pow_parser` output (dataclasses) to the `Scene` object model. `parse_scene(path)` tokenises and parses the `.pow` source, then converts each `SceneXxx` dataclass into its corresponding `shapes`/`scene` object. Handles `_build_shape()` for all primitives and CSG nodes (recursively), mesh loading via `obj_loader`, and `_maybe_wrap()` to apply `TransformedShape` when a `SceneTransform` is present.
+
+#### `parsers/pov.py` — Legacy .pov Parser
+
+Reads the legacy `.pov` format (see Scene File Format below). Uses regex to extract blocks (`camera { ... }`, `sphere { ... }`, etc.) and parse their key-value contents. Supports `//` single-line comments.
+
+#### `rendering/renderer.py` — Orchestration
+
+Manages `RenderContext`, builds the BVH over the scene objects, and dispatches row-bands to worker processes. Uses a recursive `_trace()` helper (max depth: 8). For each hit it:
 1. Computes diffuse shading via `_shade()` (skipped for `ior > 1.0` objects).
 2. Applies mirror reflection (`obj.reflect`, only for `ior == 1.0` objects).
 3. Handles transparency/refraction: if `ior == 1.0`, naive alpha blend; if `ior > 1.0`, physical Snell's law + TIR + Schlick Fresnel via `_refract()` and `_schlick()`.
 
-Shadow computation via `_shadow_factor()` fires one shadow ray per point light or `light.samples` rays per area light. Transparent objects attenuate by `(1 - opacity)`. Returns a `list[Color]`. Prints progress every 50 rows.
+Returns a `list[Color]`. Prints progress every 50 rows.
+
+#### `rendering/shading.py` — Shading
+
+Lambertian diffuse shading and soft shadow computation. Shadow computation via `_shadow_factor()` fires one shadow ray per point light or `light.samples` rays per area light. Transparent objects attenuate by `(1 - opacity)`.
+
+#### `rendering/physics.py` — Physics
+
+Snell's law refraction (`_refract()`) and Schlick Fresnel approximation (`_schlick()`). Handles entering/exiting detection, total internal reflection, and the final reflection/refraction blend.
 
 #### `main.py` — Entry Point
 
 Parses CLI arguments, calls the parser and renderer, and saves the result as a PNG via Pillow. Invoked via `python3 main.py`.
-
----
-
-## POW Scene Language
-
-`.pow` is the new scene language — a proper scripting language with variables, expressions, loops, imports, reusable materials, and affine transforms. See **[docs/pow-reference.md](docs/pow-reference.md)** for the full reference.
-
-Key language features at a glance:
-
-- **Variables** — `let name = expr` eliminates repeated magic numbers
-- **Loops** — `for i in range(n)` generates repeated geometry programmatically
-- **Functions** — `let f = fn(a, b) { ... }` with block bodies and return values
-- **Materials** — `let m = material { color (...) opacity N reflect N ior N }` reusable across shapes
-- **Imports** — `import "path/to/file.pow"` shares material libraries across scenes
-- **CSG** — `union`, `intersection`, `difference` nodes combine shapes into composite objects
-- **Transforms** — `let t = transform { scale rotate translate }` wraps any shape or CSG node with an affine transform; reusable across shapes; foundation for future animation
-
-Quick example:
-
-```
-import "materials/standard.pow"
-
-let count = 5
-camera { location (0, 3, -9)  look_at (0, 1, 0)  fov 55 }
-light  { position (4, 8, -4)  radius 1.5  samples 24 }
-plane  { normal (0,1,0)  offset 0  material matte_gray }
-
-for i in range(count) {
-  sphere {
-    center (i * 2.0, 1.0, 0)
-    radius 0.8
-    material glass
-  }
-}
-```
-
-```bash
-python3 main.py examples/10-pow-loops.pow -W 800 -H 600 -o render.png
-```
-
----
-
-## Legacy Scene File Format (.pov)
-
-The `.pov` format uses a block-based syntax with C-style braces. Vectors use angle-bracket notation `<x, y, z>`. Single-line comments with `//` are supported.
-
-### Supported Blocks
-
-#### camera (required, exactly one)
-
-```
-camera {
-  location <x, y, z>    // Camera position in world space
-  look_at  <x, y, z>    // Point the camera is aimed at
-  fov      60           // Vertical field of view in degrees
-}
-```
-
-#### light (one or more recommended)
-
-```
-light {
-  position <x, y, z>    // Light position in world space
-  radius   1.5          // Optional: sphere radius for area light (default: 0 = point light)
-  samples  32           // Optional: shadow rays per area light sample (default: 16)
-}
-```
-
-`radius 0` (default) produces hard shadows from a point light using a single shadow ray.
-`radius > 0` produces soft penumbra shadows using `samples` rays fired to random points on the light sphere.
-
-#### sphere
-
-```
-sphere {
-  center <x, y, z>      // Center of the sphere
-  radius 1.0            // Radius
-  color <r, g, b>       // Optional RGB color, floats in [0.0, 1.0] (default: white)
-  color name            // OR: a named color (see Named Colors)
-  opacity 0.5           // Optional opacity in [0.0, 1.0] (default: 1.0 = fully opaque)
-  reflect 0.5           // Optional reflectivity in [0.0, 1.0] (default: 0.0); ignored if ior > 1.0
-  ior 1.5               // Optional index of refraction >= 1.0 (default: 1.0 = air, no refraction)
-                        //   Common values: 1.33 (water), 1.5 (glass), 2.4 (diamond)
-                        //   Set opacity 0.0 for clear glass
-}
-```
-
-#### plane
-
-```
-plane {
-  normal <x, y, z>      // Surface normal (will be normalized)
-  offset 0              // Distance from origin along the normal
-  color <r, g, b>       // Optional RGB color, floats in [0.0, 1.0] (default: white)
-  color name            // OR: a named color (see Named Colors)
-  opacity 0.5           // Optional opacity in [0.0, 1.0] (default: 1.0 = fully opaque)
-  reflect 0.5           // Optional reflectivity in [0.0, 1.0] (default: 0.0); ignored if ior > 1.0
-  ior 1.5               // Optional index of refraction >= 1.0 (default: 1.0 = air, no refraction)
-}
-```
-
-#### box
-
-```
-box {
-  min <x, y, z>            // Minimum corner of the axis-aligned bounding box
-  max <x, y, z>            // Maximum corner of the axis-aligned bounding box
-  color <r, g, b>          // Optional RGB color (default: white)
-  color name               // OR: a named color (see Named Colors)
-  opacity 0.5              // Optional opacity in [0.0, 1.0] (default: 1.0)
-  reflect 0.5              // Optional reflectivity in [0.0, 1.0] (default: 0.0)
-  ior 1.5                  // Optional index of refraction >= 1.0 (default: 1.0)
-}
-```
-
-#### cylinder
-
-```
-cylinder {
-  bottom <x, y, z>         // Centre of the bottom cap
-  top    <x, y, z>         // Centre of the top cap (axis direction = top − bottom)
-  radius 1.0               // Radius of the cylinder
-  color <r, g, b>          // Optional RGB color (default: white)
-  color name               // OR: a named color (see Named Colors)
-  opacity 0.5              // Optional opacity in [0.0, 1.0] (default: 1.0)
-  reflect 0.5              // Optional reflectivity in [0.0, 1.0] (default: 0.0)
-  ior 1.5                  // Optional index of refraction >= 1.0 (default: 1.0)
-}
-```
-
-#### cone
-
-```
-cone {
-  bottom        <x, y, z>  // Centre of the bottom cap
-  top           <x, y, z>  // Centre of the top cap
-  bottom_radius 1.0        // Radius at the bottom cap
-  top_radius    0.0        // Radius at the top cap (0.0 = true cone apex)
-  color <r, g, b>          // Optional RGB color (default: white)
-  color name               // OR: a named color (see Named Colors)
-  opacity 0.5              // Optional opacity in [0.0, 1.0] (default: 1.0)
-  reflect 0.5              // Optional reflectivity in [0.0, 1.0] (default: 0.0)
-  ior 1.5                  // Optional index of refraction >= 1.0 (default: 1.0)
-}
-```
-
-#### torus
-
-```
-torus {
-  center       <x, y, z>   // Centre of the torus
-  axis         <x, y, z>   // Symmetry axis (will be normalized)
-  major_radius 1.5         // Distance from the torus centre to the tube centre
-  minor_radius 0.4         // Radius of the tube
-  color <r, g, b>          // Optional RGB color (default: white)
-  color name               // OR: a named color (see Named Colors)
-  opacity 0.5              // Optional opacity in [0.0, 1.0] (default: 1.0)
-  reflect 0.5              // Optional reflectivity in [0.0, 1.0] (default: 0.0)
-  ior 1.5                  // Optional index of refraction >= 1.0 (default: 1.0)
-}
-```
-
-### Example
-
-```
-// A sphere floating above a ground plane
-camera {
-  location <0, 2, -5>
-  look_at <0, 0.5, 0>
-  fov 60
-}
-
-light {
-  position <5, 10, -3>
-}
-
-plane {
-  normal <0, 1, 0>
-  offset 0
-}
-
-sphere {
-  center <0, 1, 0>
-  radius 1.0
-}
-```
-
-### Named Colors
-
-The following color names can be used directly in `sphere` and `plane` blocks:
-
-| Name      | RGB (float)        |
-|-----------|--------------------|
-| `red`     | (1.0, 0.0, 0.0)   |
-| `green`   | (0.0, 0.8, 0.0)   |
-| `blue`    | (0.0, 0.0, 1.0)   |
-| `yellow`  | (1.0, 1.0, 0.0)   |
-| `cyan`    | (0.0, 1.0, 1.0)   |
-| `magenta` | (1.0, 0.0, 1.0)   |
-| `orange`  | (1.0, 0.5, 0.0)   |
-| `purple`  | (0.5, 0.0, 0.5)   |
-| `pink`    | (1.0, 0.4, 0.7)   |
-| `indigo`  | (0.29, 0.0, 0.51) |
-| `violet`  | (0.56, 0.0, 1.0)  |
-| `white`   | (1.0, 1.0, 1.0)   |
-| `black`   | (0.0, 0.0, 0.0)   |
-| `gray`    | (0.5, 0.5, 0.5)   |
-| `brown`   | (0.6, 0.3, 0.1)   |
 
 ---
 
@@ -489,14 +308,14 @@ The following color names can be used directly in `sphere` and `plane` blocks:
 ### Running
 
 ```bash
-python3 main.py <scene.pov> [-W WIDTH] [-H HEIGHT] [-o OUTPUT]
+python3 main.py <scene> [-W WIDTH] [-H HEIGHT] [-o OUTPUT]
 ```
 
 **Arguments:**
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `scene` | (required) | Path to the `.pov` scene file |
+| `scene` | (required) | Path to a `.pov` (legacy) or `.pow` scene file |
 | `-W`, `--width` | 800 | Image width in pixels |
 | `-H`, `--height` | 600 | Image height in pixels |
 | `-o`, `--output` | `output.png` | Output file path (PNG format) |
@@ -521,7 +340,6 @@ python3 main.py examples/01-basic.pov -W 1024 -H 768 -o render.png
 ## Possible Next Steps
 
 - **Disk and rectangular area lights** — more physically accurate than sphere area lights for studio-style lighting setups (e.g., `disk { position ... normal ... radius ... }`)
-- **Mesh file loading (OBJ/PLY)** for complex geometry
 - **GIF animations** - capacity of animating objects through space and output a gif/video
 
 ---
@@ -537,6 +355,14 @@ python3 main.py examples/01-basic.pov -W 1024 -H 768 -o render.png
 - Works with all primitives (sphere, box, cylinder, cone, torus, mesh) and all CSG nodes (union, intersection, difference)
 - Foundation for future keyframe animation — each frame can update transform fields
 - Example scene: `examples/16-transforms.pow`
+
+### v1.2 — CSG & OBJ Mesh Loading (2026-03-10)
+
+- **CSG** — `union`, `intersection`, `difference` nodes in `.pow`; backed by `hit_intervals()` on all bounded shapes; optional `fuse` mode on union blends materials at boundaries
+- **`HitInterval`** dataclass and `mat_obj` field on `HitRecord` to support CSG material routing
+- **OBJ mesh loading** — `mesh { file "..." }` block in `.pow`; `obj_loader.py` parses Wavefront OBJ/MTL including per-vertex normals and multi-material groups; `TriangleMesh` accelerated by an internal BVH
+- **`Triangle`** primitive with Möller-Trumbore intersection and interpolated vertex normals
+- Example scenes: `examples/13-csg.pow`, `examples/15-boot.pow`
 
 ### v1.1 — Functions & Conditionals (2026-03-04)
 

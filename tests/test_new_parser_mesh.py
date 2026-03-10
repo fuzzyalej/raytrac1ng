@@ -3,7 +3,7 @@ import os
 import tempfile
 import pytest
 
-from new_parser import parse_scene
+from parsers.pow_adapter import parse_scene
 from shapes import TriangleMesh
 
 
@@ -55,7 +55,7 @@ def test_mesh_color_override():
     scene, _ = _make_scene(POW_WITH_COLOR_TEMPLATE)
     mesh = scene.objects[0]
     tri = mesh._triangles[0]
-    assert abs(tri.color.r - 0.8) < 1e-6
+    assert abs(tri.material.color.r - 0.8) < 1e-6
 
 
 def test_missing_obj_raises():

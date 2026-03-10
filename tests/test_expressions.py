@@ -1,8 +1,8 @@
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from lexer import tokenise
-from lang_parser import Parser, ParseError
+from parsers.pow_lexer import tokenise
+from parsers.pow_parser import Parser, ParseError
 import pytest
 
 def parse_expr(src, env=None):

@@ -1,16 +1,17 @@
 """Tests for anti-aliasing in renderer.render()."""
 
 from color import Color
+from material import Material
 from scene import Scene, Camera, Light
 from shapes import Sphere
 from vector import Vec3
-from renderer import render
+from rendering import render
 
 
 def _simple_scene():
     cam = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0), fov=60)
     light = Light(Vec3(5, 5, -5))
-    sphere = Sphere(Vec3(0, 0, 0), 1.0, Color(1, 0, 0))
+    sphere = Sphere(Vec3(0, 0, 0), 1.0, material=Material(color=Color(1, 0, 0)))
     return Scene(camera=cam, lights=[light], objects=[sphere])
 
 

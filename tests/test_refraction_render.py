@@ -1,18 +1,21 @@
 """Integration tests for physical refraction in renderer._trace()."""
 import pytest
 from color import Color
+from material import Material
 from scene import Scene, Camera, Light
 from shapes import Sphere
 from vector import Vec3
-from renderer import render
+from rendering import render
 
 
 def _glass_scene(ior=1.5):
     """Camera looking at a glass sphere in front of a red background sphere."""
     cam = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0), fov=60)
     light = Light(Vec3(0, 5, -3))
-    glass = Sphere(Vec3(0, 0, 0), 1.0, Color(1, 1, 1), opacity=0.0, ior=ior)
-    red_bg = Sphere(Vec3(0, 0, 5), 4.0, Color(1, 0, 0))
+    glass = Sphere(Vec3(0, 0, 0), 1.0,
+                   material=Material(color=Color(1, 1, 1), opacity=0.0, ior=ior))
+    red_bg = Sphere(Vec3(0, 0, 5), 4.0,
+                    material=Material(color=Color(1, 0, 0)))
     return Scene(camera=cam, lights=[light], objects=[glass, red_bg])
 
 
@@ -51,7 +54,8 @@ def test_existing_opaque_scene_unchanged():
     """Opaque objects (ior=1.0, opacity=1.0) render exactly as before."""
     cam = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0), fov=60)
     light = Light(Vec3(5, 5, -5))
-    s = Sphere(Vec3(0, 0, 0), 1.0, Color(1, 0, 0))  # default ior=1.0, opacity=1.0
+    s = Sphere(Vec3(0, 0, 0), 1.0,
+               material=Material(color=Color(1, 0, 0)))  # default ior=1.0, opacity=1.0
     scene = Scene(camera=cam, lights=[light], objects=[s])
     pixels = render(scene, 16, 12)
     assert len(pixels) == 16 * 12

@@ -219,7 +219,8 @@ def test_union_bounding_box():
 def test_union_inherits_child_material():
     """When CSGUnion has no material override, child material is used."""
     from color import Color
-    a = Sphere(Vec3(0, 0, 0), 1.0, color=Color(1, 0, 0))
+    from material import Material
+    a = Sphere(Vec3(0, 0, 0), 1.0, material=Material(color=Color(1, 0, 0)))
     u = CSGUnion([a])
     ray = _ray(-3, 0, 0, 1, 0, 0)
     hit = u.hit(ray)
@@ -230,13 +231,14 @@ def test_union_inherits_child_material():
 def test_union_material_override():
     """CSGUnion color override takes precedence over child."""
     from color import Color
-    a = Sphere(Vec3(0, 0, 0), 1.0, color=Color(1, 0, 0))
+    from material import Material
+    a = Sphere(Vec3(0, 0, 0), 1.0, material=Material(color=Color(1, 0, 0)))
     u = CSGUnion([a], color=Color(0, 0, 1))
     ray = _ray(-3, 0, 0, 1, 0, 0)
     hit = u.hit(ray)
     assert hit is not None
-    # mat_obj should be a _ResolvedMat with color=(0,0,1)
-    assert hit.mat_obj.color == Color(0, 0, 1)
+    # mat_obj should be a _ResolvedMat with .material.color=(0,0,1)
+    assert hit.mat_obj.material.color == Color(0, 0, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -348,7 +350,7 @@ def test_difference_requires_exactly_two_children():
 # Task 10: Renderer integration smoke tests
 # ---------------------------------------------------------------------------
 
-from renderer import _trace
+from rendering.renderer import _trace, RenderContext
 from scene import Scene, Camera, Light
 from color import Color
 
@@ -361,28 +363,37 @@ def _make_scene(*objects):
     return scene
 
 
+def _scene_to_ctx(scene):
+    """Build a RenderContext with no BVH (linear fallback) for unit tests."""
+    return RenderContext(scene=scene, bvh=None, unbounded=[])
+
+
 def test_renderer_traces_csg_union():
     """A CSGUnion in the scene renders without error and produces a non-background color."""
+    from material import Material
     BG = Color(0.05, 0.05, 0.08)
-    a = Sphere(Vec3(0, 1, 0), 0.8, color=Color(1, 0, 0))
-    b = Sphere(Vec3(0.5, 1, 0), 0.8, color=Color(0, 0, 1))
+    a = Sphere(Vec3(0, 1, 0), 0.8, material=Material(color=Color(1, 0, 0)))
+    b = Sphere(Vec3(0.5, 1, 0), 0.8, material=Material(color=Color(0, 0, 1)))
     u = CSGUnion([a, b])
     scene = _make_scene(u)
+    ctx = _scene_to_ctx(scene)
     ray = VisionRay(Vec3(0, 1, -5), Vec3(0, 0, 1))
-    color = _trace(ray, scene, depth=3)
+    color = _trace(ray, ctx, depth=3)
     assert color != BG   # hit something
     assert color.r > color.b  # 'a' (red) is the entry point
 
 
 def test_renderer_csg_difference_correct_color():
     """CSGDifference material falls back to A's child color."""
-    big   = Sphere(Vec3(0, 0, 0), 1.5, color=Color(1, 0, 0))   # red
-    small = Sphere(Vec3(0, 0, 0), 0.8, color=Color(0, 0, 1))   # blue
+    from material import Material
+    big   = Sphere(Vec3(0, 0, 0), 1.5, material=Material(color=Color(1, 0, 0)))   # red
+    small = Sphere(Vec3(0, 0, 0), 0.8, material=Material(color=Color(0, 0, 1)))   # blue
     diff  = CSGDifference(big, small)
     scene = _make_scene(diff)
+    ctx = _scene_to_ctx(scene)
     # Ray hits the outer shell of 'big' — should be red-ish
     ray = VisionRay(Vec3(-3, 0, 0), Vec3(1, 0, 0))
-    color = _trace(ray, scene, depth=1)
+    color = _trace(ray, ctx, depth=1)
     assert color.r > color.b   # red component dominates
 
 
@@ -390,7 +401,7 @@ def test_renderer_csg_difference_correct_color():
 # Task 11: Lang parser — CSG dataclasses + _block_stmt_csg()
 # ---------------------------------------------------------------------------
 
-from lang_parser import parse_source, SceneCSGUnion, SceneCSGIntersection, SceneCSGDifference
+from parsers.pow_parser import parse_source, SceneCSGUnion, SceneCSGIntersection, SceneCSGDifference
 
 
 def test_parse_union_block():
@@ -487,7 +498,7 @@ def test_parse_nested_csg():
 
 def test_parse_fuse_in_non_union_raises():
     import pytest
-    from lang_parser import ParseError
+    from parsers.pow_parser import ParseError
     src = """
     intersection {
       fuse yes
@@ -503,7 +514,7 @@ import tempfile, os
 
 
 def test_new_parser_builds_csg_scene():
-    from new_parser import parse_scene
+    from parsers.pow_adapter import parse_scene
     src = """
 camera { location (0, 0, -5)  look_at (0, 0, 0)  fov 60 }
 light  { position (4, 8, -4) }

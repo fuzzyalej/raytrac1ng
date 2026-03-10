@@ -1,9 +1,9 @@
 # tests/test_parser_transform.py
 import sys, os, pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from lang_parser import parse_source, ParseError, SceneTransform, SceneSphere
-from lexer import tokenise
-from lang_parser import _ProgramParser, BUILTINS
+from parsers.pow_parser import parse_source, ParseError, SceneTransform, SceneSphere
+from parsers.pow_lexer import tokenise
+from parsers.pow_parser import _ProgramParser, BUILTINS
 
 def _env(src):
     """Parse src and return the environment dict (to inspect stored variables)."""
@@ -54,7 +54,7 @@ def test_sphere_with_transform():
     assert s.transform.translate == pytest.approx((5.0, 0.0, 0.0), abs=1e-9)
 
 def test_box_with_transform():
-    from lang_parser import SceneBox
+    from parsers.pow_parser import SceneBox
     src = """
     let t = transform { scale (2, 1, 1) }
     box { min (-1,-1,-1)  max (1,1,1)  transform t }
@@ -65,7 +65,7 @@ def test_box_with_transform():
     assert b.transform is not None
 
 def test_shape_without_transform_has_none():
-    from lang_parser import SceneSphere
+    from parsers.pow_parser import SceneSphere
     src = "sphere { center (0,0,0)  radius 1 }"
     items = parse_source(src)
     assert items[0].transform is None
@@ -77,7 +77,7 @@ def test_undefined_transform_raises():
 
 def test_csg_child_with_transform():
     """A primitive inside a CSG block can have a transform."""
-    from lang_parser import SceneCSGUnion, SceneSphere
+    from parsers.pow_parser import SceneCSGUnion, SceneSphere
     src = """
     let t = transform { translate (1, 0, 0) }
     union {
@@ -93,7 +93,7 @@ def test_csg_child_with_transform():
 
 
 def test_union_with_transform():
-    from lang_parser import SceneCSGUnion
+    from parsers.pow_parser import SceneCSGUnion
     src = """
     let t = transform { rotate (0, 45, 0) }
     union {
@@ -109,7 +109,7 @@ def test_union_with_transform():
     assert u.transform.rotate == pytest.approx((0.0, 45.0, 0.0), abs=1e-9)
 
 def test_difference_with_transform():
-    from lang_parser import SceneCSGDifference
+    from parsers.pow_parser import SceneCSGDifference
     src = """
     let t = transform { scale (2, 1, 1) }
     difference {
@@ -124,7 +124,7 @@ def test_difference_with_transform():
     assert d.transform is not None
 
 def test_csg_without_transform_has_none():
-    from lang_parser import SceneCSGUnion
+    from parsers.pow_parser import SceneCSGUnion
     src = """
     union {
       sphere { center (0,0,0)  radius 1 }

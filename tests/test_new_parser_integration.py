@@ -57,8 +57,8 @@ def _write_temp(content: str, suffix=".pow") -> str:
 
 
 def _render(path: str, width=8, height=6):
-    from new_parser import parse_scene
-    from renderer import render
+    from parsers.pow_adapter import parse_scene
+    from rendering import render
     scene = parse_scene(path)
     return render(scene, width, height)
 
@@ -89,8 +89,8 @@ def test_material_scene_renders():
 
 def test_old_pov_still_works():
     """Regression: existing .pov files must still parse and render."""
-    from parser import parse_scene
-    from renderer import render
+    from parsers.pov import parse_scene
+    from rendering import render
     pov_path = os.path.join(os.path.dirname(__file__), "..", "examples", "01-basic.pov")
     scene = parse_scene(pov_path)
     pixels = render(scene, 8, 6)

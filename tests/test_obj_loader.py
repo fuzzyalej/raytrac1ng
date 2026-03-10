@@ -143,9 +143,9 @@ def test_mtl_color_applied():
     try:
         mesh = load_obj(obj_path)
         tri = mesh._triangles[0]
-        assert abs(tri.color.r - 1.0) < 1e-6
-        assert abs(tri.color.g) < 1e-6
-        assert abs(tri.opacity - 0.5) < 1e-6
+        assert abs(tri.material.color.r - 1.0) < 1e-6
+        assert abs(tri.material.color.g) < 1e-6
+        assert abs(tri.material.opacity - 0.5) < 1e-6
     finally:
         os.unlink(mtl)
         os.unlink(obj_path)
@@ -156,7 +156,7 @@ def test_missing_mtl_uses_defaults():
     mesh = load_obj(obj)
     os.unlink(obj)
     tri = mesh._triangles[0]
-    assert tri.color == Color(1.0, 1.0, 1.0)
+    assert tri.material.color == Color(1.0, 1.0, 1.0)
 
 
 # ---- material override from load_obj args ----
@@ -165,21 +165,21 @@ def test_color_override():
     path = _write_file(OBJ_ONE_TRI, '.obj')
     mesh = load_obj(path, color=Color(0.5, 0.5, 0.5))
     os.unlink(path)
-    assert abs(mesh._triangles[0].color.r - 0.5) < 1e-6
+    assert abs(mesh._triangles[0].material.color.r - 0.5) < 1e-6
 
 
 def test_reflect_ior_always_applied():
     path = _write_file(OBJ_ONE_TRI, '.obj')
     mesh = load_obj(path, reflect=0.3, ior=1.5)
     os.unlink(path)
-    assert abs(mesh._triangles[0].reflect - 0.3) < 1e-6
-    assert abs(mesh._triangles[0].ior - 1.5) < 1e-6
+    assert abs(mesh._triangles[0].material.reflect - 0.3) < 1e-6
+    assert abs(mesh._triangles[0].material.ior - 1.5) < 1e-6
 
 
 def test_opacity_override_without_color():
     path = _write_file(OBJ_ONE_TRI, '.obj')
     mesh = load_obj(path, opacity=0.5)
     os.unlink(path)
-    assert abs(mesh._triangles[0].opacity - 0.5) < 1e-6
+    assert abs(mesh._triangles[0].material.opacity - 0.5) < 1e-6
     # Color should remain unchanged (white)
-    assert mesh._triangles[0].color == Color(1.0, 1.0, 1.0)
+    assert mesh._triangles[0].material.color == Color(1.0, 1.0, 1.0)

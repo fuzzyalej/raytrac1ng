@@ -4,6 +4,7 @@ import pytest
 from shapes import Triangle, HitRecord
 from vector import Vec3
 from color import Color
+from material import Material
 from bvh import AABB
 from ray import VisionRay
 
@@ -83,18 +84,19 @@ def test_bounding_box_contains_vertices():
 
 def test_material_defaults():
     tri = Triangle(V0, V1, V2)
-    assert tri.color == Color(1.0, 1.0, 1.0)
-    assert tri.opacity == 1.0
-    assert tri.reflect == 0.0
-    assert tri.ior == 1.0
+    assert tri.material.color == Color(1.0, 1.0, 1.0)
+    assert tri.material.opacity == 1.0
+    assert tri.material.reflect == 0.0
+    assert tri.material.ior == 1.0
 
 
 def test_material_custom():
-    tri = Triangle(V0, V1, V2, color=Color(1, 0, 0), opacity=0.5, reflect=0.2, ior=1.5)
-    assert tri.color == Color(1, 0, 0)
-    assert tri.opacity == 0.5
-    assert tri.reflect == 0.2
-    assert tri.ior == 1.5
+    tri = Triangle(V0, V1, V2,
+                   material=Material(color=Color(1, 0, 0), opacity=0.5, reflect=0.2, ior=1.5))
+    assert tri.material.color == Color(1, 0, 0)
+    assert tri.material.opacity == 0.5
+    assert tri.material.reflect == 0.2
+    assert tri.material.ior == 1.5
 
 
 def test_partial_normals_raises():

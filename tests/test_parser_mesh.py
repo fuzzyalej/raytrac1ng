@@ -1,7 +1,7 @@
 # tests/test_parser_mesh.py
 """Tests for parsing mesh {} blocks in the POW language."""
 import pytest
-from lang_parser import parse_source, SceneMesh
+from parsers.pow_parser import parse_source, SceneMesh
 
 
 CAM   = "camera { location (0,0,-5)  look_at (0,0,0)  fov 60 }\n"
@@ -50,7 +50,7 @@ def test_parse_mesh_defaults():
 
 
 def test_parse_mesh_missing_file_raises():
-    from lang_parser import ParseError
+    from parsers.pow_parser import ParseError
     src = CAM + LIGHT + 'mesh { color (1,0,0) }\n'
     with pytest.raises(ParseError):
         parse_source(src)

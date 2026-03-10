@@ -1,63 +1,13 @@
-"""Geometric primitives — HitRecord and all shape classes."""
+"""Geometric primitives — HitRecord, HitInterval, and all primitive shape classes."""
 
+from __future__ import annotations
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from vector import Vec3, Matrix4x4
 from color import Color
-
-
-# ---------------------------------------------------------------------------
-# Transform
-# ---------------------------------------------------------------------------
-
-class Transform:
-    """Stores TRS (scale, rotate_deg, translate) components for affine transforms.
-
-    Lazily computes and caches the 4x4 matrix and its inverse so they are only
-    built once per transform instance, regardless of how many rays it processes.
-    Components are kept separate (not baked into a single matrix) to support
-    future per-component animation interpolation.
-    """
-
-    __slots__ = ('scale', 'rotate', 'translate', '_mat', '_inv')
-
-    def __init__(self,
-                 scale     = (1.0, 1.0, 1.0),   # tuple or scalar float; see body for handling
-                 rotate    = (0.0, 0.0, 0.0),
-                 translate = (0.0, 0.0, 0.0)):
-        # Accept scalar for uniform scale
-        if isinstance(scale, (int, float)):
-            scale = (float(scale), float(scale), float(scale))
-        self.scale     = tuple(float(x) for x in scale)
-        self.rotate    = tuple(float(x) for x in rotate)
-        self.translate = tuple(float(x) for x in translate)
-        if len(self.scale) != 3:
-            raise ValueError(f"Transform: scale must have 3 components, got {len(self.scale)}")
-        if len(self.rotate) != 3:
-            raise ValueError(f"Transform: rotate must have 3 components, got {len(self.rotate)}")
-        if len(self.translate) != 3:
-            raise ValueError(f"Transform: translate must have 3 components, got {len(self.translate)}")
-        self._mat = None   # type: Optional[Matrix4x4]
-        self._inv = None   # type: Optional[Matrix4x4]
-
-    def matrix(self) -> Matrix4x4:
-        """Return the cached TRS matrix, building it on first call."""
-        if self._mat is None:
-            self._mat = Matrix4x4.from_trs(self.scale, self.rotate, self.translate)
-        return self._mat
-
-    def inverse_matrix(self) -> Matrix4x4:
-        """Return the cached inverse TRS matrix, building it on first call."""
-        if self._inv is None:
-            # matrix() builds and caches _mat as a side-effect; that is intentional.
-            self._inv = self.matrix().inverse()
-        return self._inv
-
-    def __repr__(self) -> str:
-        return (f"Transform(scale={self.scale}, rotate={self.rotate}, "
-                f"translate={self.translate})")
+from material import Material
 
 
 # ---------------------------------------------------------------------------
@@ -91,14 +41,10 @@ class HitRecord:
 class Sphere:
     """Sphere defined by center and radius."""
 
-    def __init__(self, center: Vec3, radius: float, color: Color = None,
-                 opacity: float = 1.0, reflect: float = 0.0, ior: float = 1.0):
-        self.center = center
-        self.radius = radius
-        self.color = color if color is not None else Color(1.0, 1.0, 1.0)
-        self.opacity = max(0.0, min(1.0, float(opacity)))
-        self.reflect = max(0.0, min(1.0, float(reflect)))
-        self.ior = max(1.0, float(ior))
+    def __init__(self, center: Vec3, radius: float, material: Material = None):
+        self.center   = center
+        self.radius   = radius
+        self.material = material if material is not None else Material()
 
     def hit(self, ray, t_min: float = 0.001, t_max: float = float('inf')) -> Optional[HitRecord]:
         oc = ray.origin - self.center
@@ -157,14 +103,10 @@ class Plane:
     The plane equation is: dot(point, normal) = offset
     """
 
-    def __init__(self, normal: Vec3, offset: float, color: Color = None,
-                 opacity: float = 1.0, reflect: float = 0.0, ior: float = 1.0):
-        self.normal = normal.normalize()
-        self.offset = offset
-        self.color = color if color is not None else Color(1.0, 1.0, 1.0)
-        self.opacity = max(0.0, min(1.0, float(opacity)))
-        self.reflect = max(0.0, min(1.0, float(reflect)))
-        self.ior = max(1.0, float(ior))
+    def __init__(self, normal: Vec3, offset: float, material: Material = None):
+        self.normal   = normal.normalize()
+        self.offset   = offset
+        self.material = material if material is not None else Material()
 
     def hit(self, ray, t_min: float = 0.001, t_max: float = float('inf')) -> Optional[HitRecord]:
         denom = ray.direction.dot(self.normal)
@@ -185,18 +127,14 @@ class Box:
     Uses the slab method: intersect 3 pairs of axis-aligned planes.
     """
 
-    def __init__(self, min_pt: Vec3, max_pt: Vec3, color: Color = None,
-                 opacity: float = 1.0, reflect: float = 0.0, ior: float = 1.0):
+    def __init__(self, min_pt: Vec3, max_pt: Vec3, material: Material = None):
         self.min_pt = min_pt
         self.max_pt = max_pt
         if (self.min_pt.x > self.max_pt.x or
                 self.min_pt.y > self.max_pt.y or
                 self.min_pt.z > self.max_pt.z):
             raise ValueError("Box: min_pt must be <= max_pt on all axes")
-        self.color = color if color is not None else Color(1.0, 1.0, 1.0)
-        self.opacity = max(0.0, min(1.0, float(opacity)))
-        self.reflect = max(0.0, min(1.0, float(reflect)))
-        self.ior = max(1.0, float(ior))
+        self.material = material if material is not None else Material()
 
     def hit(self, ray, t_min: float = 0.001,
             t_max: float = float('inf')) -> Optional[HitRecord]:
@@ -313,8 +251,7 @@ class Cylinder:
     """
 
     def __init__(self, bottom: Vec3, top: Vec3, radius: float,
-                 color: Color = None, opacity: float = 1.0,
-                 reflect: float = 0.0, ior: float = 1.0):
+                 material: Material = None):
         self.bottom = bottom
         self.top    = top
         self.radius = max(0.0, float(radius))
@@ -324,11 +261,8 @@ class Cylinder:
         self.height = axis_vec.length()
         if self.height < 1e-10:
             raise ValueError("Cylinder: top and bottom must be distinct points")
-        self.axis   = axis_vec / self.height        # unit axis direction D
-        self.color   = color if color is not None else Color(1.0, 1.0, 1.0)
-        self.opacity = max(0.0, min(1.0, float(opacity)))
-        self.reflect = max(0.0, min(1.0, float(reflect)))
-        self.ior     = max(1.0, float(ior))
+        self.axis     = axis_vec / self.height        # unit axis direction D
+        self.material = material if material is not None else Material()
 
     def hit(self, ray, t_min: float = 0.001,
             t_max: float = float('inf')) -> Optional[HitRecord]:
@@ -472,8 +406,7 @@ class Cone:
 
     def __init__(self, bottom: Vec3, top: Vec3,
                  bottom_radius: float, top_radius: float,
-                 color: Color = None, opacity: float = 1.0,
-                 reflect: float = 0.0, ior: float = 1.0):
+                 material: Material = None):
         self.bottom        = bottom
         self.top           = top
         self.bottom_radius = max(0.0, float(bottom_radius))
@@ -482,12 +415,9 @@ class Cone:
         self.height  = axis_vec.length()
         if self.height < 1e-10:
             raise ValueError("Cone: top and bottom must be distinct points")
-        self.axis    = axis_vec / self.height
-        self.slope   = (self.top_radius - self.bottom_radius) / self.height
-        self.color   = color if color is not None else Color(1.0, 1.0, 1.0)
-        self.opacity = max(0.0, min(1.0, float(opacity)))
-        self.reflect = max(0.0, min(1.0, float(reflect)))
-        self.ior     = max(1.0, float(ior))
+        self.axis     = axis_vec / self.height
+        self.slope    = (self.top_radius - self.bottom_radius) / self.height
+        self.material = material if material is not None else Material()
 
     def hit(self, ray, t_min: float = 0.001,
             t_max: float = float('inf')) -> Optional[HitRecord]:
@@ -779,8 +709,7 @@ class Torus:
 
     def __init__(self, center: Vec3, axis: Vec3,
                  major_radius: float, minor_radius: float,
-                 color: Color = None, opacity: float = 1.0,
-                 reflect: float = 0.0, ior: float = 1.0):
+                 material: Material = None):
         self.center       = center
         self.major_radius = float(major_radius)
         self.minor_radius = float(minor_radius)
@@ -791,10 +720,7 @@ class Torus:
         if self.minor_radius >= self.major_radius:
             raise ValueError("Torus: minor_radius must be less than major_radius "
                              "to avoid a self-intersecting surface")
-        self.color   = color if color is not None else Color(1.0, 1.0, 1.0)
-        self.opacity = max(0.0, min(1.0, float(opacity)))
-        self.reflect = max(0.0, min(1.0, float(reflect)))
-        self.ior     = max(1.0, float(ior))
+        self.material = material if material is not None else Material()
 
         # Build orthonormal frame  (W = axis → local Y)
         self.W = axis.normalize()
@@ -901,532 +827,3 @@ class Torus:
         extent = self.major_radius + self.minor_radius
         r = Vec3(extent, extent, extent)
         return AABB(self.center - r, self.center + r)
-
-
-# ---------------------------------------------------------------------------
-# CSG helpers
-# ---------------------------------------------------------------------------
-
-_CSG_FUSE_EPS = 0.002  # intervals within this distance are fused
-
-
-def _merge_intervals(intervals: list, fuse: bool = False) -> list:
-    """Merge a list of HitIntervals into non-overlapping sorted intervals.
-
-    fuse=True also merges intervals that are within _CSG_FUSE_EPS of each other
-    (suppresses internal seams for glass-on-glass unions).
-    """
-    if not intervals:
-        return []
-    eps = _CSG_FUSE_EPS if fuse else 0.0
-    intervals = sorted(intervals, key=lambda iv: iv.t_enter)
-    result = [intervals[0]]
-    for iv in intervals[1:]:
-        last = result[-1]
-        if iv.t_enter <= last.t_exit + eps:
-            # overlap or touch — extend
-            if iv.t_exit > last.t_exit:
-                result[-1] = HitInterval(
-                    t_enter=last.t_enter,
-                    t_exit=iv.t_exit,
-                    enter_normal=last.enter_normal,
-                    exit_normal=iv.exit_normal,
-                    enter_obj=last.enter_obj,
-                    exit_obj=iv.exit_obj,
-                )
-        else:
-            result.append(iv)
-    return result
-
-
-class _ResolvedMat:
-    """Transient per-hit object that merges a CSG node's overrides with a child's material."""
-    __slots__ = ('color', 'opacity', 'reflect', 'ior')
-
-    def __init__(self, csg, child):
-        self.color   = csg.color   if csg.color   is not None else child.color
-        self.opacity = csg.opacity if csg.opacity is not None else child.opacity
-        self.reflect = csg.reflect if csg.reflect is not None else child.reflect
-        self.ior     = csg.ior     if csg.ior     is not None else child.ior
-
-
-# ---------------------------------------------------------------------------
-# CSGUnion
-# ---------------------------------------------------------------------------
-
-class CSGUnion:
-    """n-ary union of bounded shapes.
-
-    fuse=True suppresses internal seams (use for transparent/glass children).
-    Optional color/opacity/reflect/ior override child materials per-field.
-    """
-
-    def __init__(self, children: list, fuse: bool = False,
-                 color=None, opacity=None, reflect=None, ior=None):
-        if not children:
-            raise ValueError("CSGUnion requires at least one child")
-        self.children = children
-        self.fuse     = fuse
-        self.color    = color
-        self.opacity  = opacity
-        self.reflect  = reflect
-        self.ior      = ior
-
-    def _has_material(self) -> bool:
-        return any(v is not None for v in (self.color, self.opacity,
-                                           self.reflect, self.ior))
-
-    def _resolve_mat(self, child_obj):
-        if not self._has_material():
-            return child_obj
-        return _ResolvedMat(self, child_obj)
-
-    def hit_intervals(self, ray, t_min: float = 1e-9,
-                      t_max: float = float('inf')) -> list:
-        all_ivs = []
-        for child in self.children:
-            all_ivs.extend(child.hit_intervals(ray, t_min, t_max))
-        return _merge_intervals(all_ivs, fuse=self.fuse)
-
-    def hit(self, ray, t_min: float = 0.001,
-            t_max: float = float('inf')):
-        for iv in self.hit_intervals(ray, 1e-9, t_max):
-            if iv.t_enter >= t_min:
-                return HitRecord(t=iv.t_enter,
-                                 point=ray.point_at(iv.t_enter),
-                                 normal=iv.enter_normal,
-                                 mat_obj=self._resolve_mat(iv.enter_obj))
-            if iv.t_exit >= t_min:
-                # ray started inside this interval
-                return HitRecord(t=iv.t_exit,
-                                 point=ray.point_at(iv.t_exit),
-                                 normal=iv.exit_normal,
-                                 mat_obj=self._resolve_mat(iv.exit_obj))
-        return None
-
-    def bounding_box(self):
-        from bvh import AABB
-        boxes = [c.bounding_box() for c in self.children]
-        mn = Vec3(min(b.min_pt.x for b in boxes),
-                  min(b.min_pt.y for b in boxes),
-                  min(b.min_pt.z for b in boxes))
-        mx = Vec3(max(b.max_pt.x for b in boxes),
-                  max(b.max_pt.y for b in boxes),
-                  max(b.max_pt.z for b in boxes))
-        return AABB(mn, mx)
-
-
-# ---------------------------------------------------------------------------
-# CSGIntersection
-# ---------------------------------------------------------------------------
-
-def _intersect_intervals(lists_of_intervals: list) -> list:
-    """Compute the n-ary intersection of multiple interval lists.
-
-    Returns regions covered by ALL lists simultaneously.
-    Entry point: the latest entry among all lists (that child's normal).
-    Exit  point: the earliest exit (that child's normal).
-    """
-    if not lists_of_intervals:
-        return []
-
-    # Start with the first list, intersect with each subsequent list
-    result = lists_of_intervals[0]
-    for other in lists_of_intervals[1:]:
-        new_result = []
-        for iv_a in result:
-            for iv_b in other:
-                t_enter = max(iv_a.t_enter, iv_b.t_enter)
-                t_exit  = min(iv_a.t_exit,  iv_b.t_exit)
-                if t_enter >= t_exit:
-                    continue
-                # Entry normal: from whichever child entered last
-                if iv_a.t_enter >= iv_b.t_enter:
-                    en, eo = iv_a.enter_normal, iv_a.enter_obj
-                else:
-                    en, eo = iv_b.enter_normal, iv_b.enter_obj
-                # Exit normal: from whichever child exits first
-                if iv_a.t_exit <= iv_b.t_exit:
-                    xn, xo = iv_a.exit_normal, iv_a.exit_obj
-                else:
-                    xn, xo = iv_b.exit_normal, iv_b.exit_obj
-                new_result.append(HitInterval(t_enter, t_exit, en, xn, eo, xo))
-        result = new_result
-
-    return sorted(result, key=lambda iv: iv.t_enter)
-
-
-class CSGIntersection:
-    """n-ary intersection of bounded shapes."""
-
-    def __init__(self, children: list,
-                 color=None, opacity=None, reflect=None, ior=None):
-        if len(children) < 2:
-            raise ValueError("CSGIntersection requires at least 2 children")
-        self.children = children
-        self.color    = color
-        self.opacity  = opacity
-        self.reflect  = reflect
-        self.ior      = ior
-
-    def _has_material(self) -> bool:
-        return any(v is not None for v in (self.color, self.opacity,
-                                           self.reflect, self.ior))
-
-    def _resolve_mat(self, child_obj):
-        if not self._has_material():
-            return child_obj
-        return _ResolvedMat(self, child_obj)
-
-    def hit_intervals(self, ray, t_min: float = 1e-9,
-                      t_max: float = float('inf')) -> list:
-        lists = [c.hit_intervals(ray, t_min, t_max) for c in self.children]
-        return _intersect_intervals(lists)
-
-    def hit(self, ray, t_min: float = 0.001,
-            t_max: float = float('inf')):
-        for iv in self.hit_intervals(ray, 1e-9, t_max):
-            if iv.t_enter >= t_min:
-                return HitRecord(t=iv.t_enter,
-                                 point=ray.point_at(iv.t_enter),
-                                 normal=iv.enter_normal,
-                                 mat_obj=self._resolve_mat(iv.enter_obj))
-            if iv.t_exit >= t_min:
-                return HitRecord(t=iv.t_exit,
-                                 point=ray.point_at(iv.t_exit),
-                                 normal=iv.exit_normal,
-                                 mat_obj=self._resolve_mat(iv.exit_obj))
-        return None
-
-    def bounding_box(self):
-        from bvh import AABB
-        boxes = [c.bounding_box() for c in self.children]
-        mn = Vec3(max(b.min_pt.x for b in boxes),
-                  max(b.min_pt.y for b in boxes),
-                  max(b.min_pt.z for b in boxes))
-        mx = Vec3(min(b.max_pt.x for b in boxes),
-                  min(b.max_pt.y for b in boxes),
-                  min(b.max_pt.z for b in boxes))
-        # Guard against degenerate (non-overlapping) bounding boxes
-        mn = Vec3(min(mn.x, mx.x), min(mn.y, mx.y), min(mn.z, mx.z))
-        return AABB(mn, mx)
-
-
-# ---------------------------------------------------------------------------
-# CSGDifference
-# ---------------------------------------------------------------------------
-
-def _subtract_intervals(a_ivs: list, b_ivs: list) -> list:
-    """Subtract B intervals from A intervals: return regions in A but not in B.
-
-    At B's entry (cutting into A): that point becomes A-B exit, B normal flipped.
-    At B's exit  (still in A):    that point becomes A-B entry, B normal flipped.
-    """
-    result = []
-    for a in a_ivs:
-        # Start with A's interval, carve out each B segment
-        remaining = [a]
-        for b in b_ivs:
-            new_remaining = []
-            for seg in remaining:
-                # B entirely before or after this A segment → unchanged
-                if b.t_exit <= seg.t_enter or b.t_enter >= seg.t_exit:
-                    new_remaining.append(seg)
-                    continue
-                # Left fragment: [seg.t_enter, b.t_enter] if positive width
-                if b.t_enter > seg.t_enter:
-                    new_remaining.append(HitInterval(
-                        t_enter=seg.t_enter,
-                        t_exit=b.t_enter,
-                        enter_normal=seg.enter_normal,
-                        exit_normal=Vec3(-b.enter_normal.x,
-                                         -b.enter_normal.y,
-                                         -b.enter_normal.z),  # B entry flipped
-                        enter_obj=seg.enter_obj,
-                        exit_obj=b.enter_obj,
-                    ))
-                # Right fragment: [b.t_exit, seg.t_exit] if positive width
-                if b.t_exit < seg.t_exit:
-                    new_remaining.append(HitInterval(
-                        t_enter=b.t_exit,
-                        t_exit=seg.t_exit,
-                        enter_normal=Vec3(-b.exit_normal.x,
-                                          -b.exit_normal.y,
-                                          -b.exit_normal.z),  # B exit flipped
-                        exit_normal=seg.exit_normal,
-                        enter_obj=b.exit_obj,
-                        exit_obj=seg.exit_obj,
-                    ))
-            remaining = new_remaining
-        result.extend(remaining)
-
-    return sorted(result, key=lambda iv: iv.t_enter)
-
-
-class CSGDifference:
-    """Binary difference: first child minus second child (A - B).
-
-    Raises ValueError if anything other than exactly 2 positional args are given.
-    """
-
-    def __init__(self, left, right, _sentinel=None,
-                 color=None, opacity=None, reflect=None, ior=None):
-        if _sentinel is not None:
-            raise ValueError("CSGDifference is binary: supply exactly 2 children")
-        self.left    = left
-        self.right   = right
-        self.color   = color
-        self.opacity = opacity
-        self.reflect = reflect
-        self.ior     = ior
-
-    def _has_material(self) -> bool:
-        return any(v is not None for v in (self.color, self.opacity,
-                                           self.reflect, self.ior))
-
-    def _resolve_mat(self, child_obj):
-        if not self._has_material():
-            return child_obj
-        return _ResolvedMat(self, child_obj)
-
-    def hit_intervals(self, ray, t_min: float = 1e-9,
-                      t_max: float = float('inf')) -> list:
-        a_ivs = self.left.hit_intervals(ray, t_min, t_max)
-        b_ivs = self.right.hit_intervals(ray, t_min, t_max)
-        return _subtract_intervals(a_ivs, b_ivs)
-
-    def hit(self, ray, t_min: float = 0.001,
-            t_max: float = float('inf')):
-        for iv in self.hit_intervals(ray, 1e-9, t_max):
-            if iv.t_enter >= t_min:
-                return HitRecord(t=iv.t_enter,
-                                 point=ray.point_at(iv.t_enter),
-                                 normal=iv.enter_normal,
-                                 mat_obj=self._resolve_mat(iv.enter_obj))
-            if iv.t_exit >= t_min:
-                return HitRecord(t=iv.t_exit,
-                                 point=ray.point_at(iv.t_exit),
-                                 normal=iv.exit_normal,
-                                 mat_obj=self._resolve_mat(iv.exit_obj))
-        return None
-
-    def bounding_box(self):
-        # Conservative: same as A (we can't know what B carved out)
-        return self.left.bounding_box()
-
-
-# ---------------------------------------------------------------------------
-# Triangle  (used by TriangleMesh)
-# ---------------------------------------------------------------------------
-
-class Triangle:
-    """A single triangle for mesh rendering.
-
-    v0, v1, v2: Vec3 vertices in world space.
-    n0, n1, n2: optional Vec3 vertex normals for smooth shading.
-    """
-
-    def __init__(self, v0: Vec3, v1: Vec3, v2: Vec3,
-                 n0: Vec3 = None, n1: Vec3 = None, n2: Vec3 = None,
-                 color: Color = None, opacity: float = 1.0,
-                 reflect: float = 0.0, ior: float = 1.0):
-        self.v0 = v0
-        self.v1 = v1
-        self.v2 = v2
-        self.n0 = n0
-        self.n1 = n1
-        self.n2 = n2
-        self.color   = color if color is not None else Color(1.0, 1.0, 1.0)
-        self.opacity = max(0.0, min(1.0, float(opacity)))
-        self.reflect = max(0.0, min(1.0, float(reflect)))
-        self.ior     = max(1.0, float(ior))
-        normals_provided = [n for n in (n0, n1, n2) if n is not None]
-        if 0 < len(normals_provided) < 3:
-            raise ValueError("Triangle: provide either all three vertex normals or none")
-
-    def hit(self, ray, t_min: float = 0.001, t_max: float = float('inf')) -> Optional[HitRecord]:
-        """Möller–Trumbore ray-triangle intersection."""
-        edge1 = self.v1 - self.v0
-        edge2 = self.v2 - self.v0
-        h = ray.direction.cross(edge2)
-        a = edge1.dot(h)
-        if abs(a) < 1e-8:
-            return None  # ray parallel to triangle
-        f = 1.0 / a
-        s = ray.origin - self.v0
-        u = f * s.dot(h)
-        if u < 0.0 or u > 1.0:
-            return None
-        q = s.cross(edge1)
-        v = f * ray.direction.dot(q)
-        if v < 0.0 or u + v > 1.0:
-            return None
-        t = f * edge2.dot(q)
-        if t < t_min or t > t_max:
-            return None
-        point = ray.point_at(t)
-        if self.n0 is not None:
-            w = 1.0 - u - v
-            normal = (self.n0 * w + self.n1 * u + self.n2 * v).normalize()
-        else:
-            normal = edge1.cross(edge2).normalize()
-        if normal.dot(ray.direction) > 0:
-            normal = -normal
-        return HitRecord(t=t, point=point, normal=normal, mat_obj=self)
-
-    def bounding_box(self):
-        from bvh import AABB
-        eps = 1e-4
-        return AABB(
-            Vec3(min(self.v0.x, self.v1.x, self.v2.x) - eps,
-                 min(self.v0.y, self.v1.y, self.v2.y) - eps,
-                 min(self.v0.z, self.v1.z, self.v2.z) - eps),
-            Vec3(max(self.v0.x, self.v1.x, self.v2.x) + eps,
-                 max(self.v0.y, self.v1.y, self.v2.y) + eps,
-                 max(self.v0.z, self.v1.z, self.v2.z) + eps),
-        )
-
-
-# ---------------------------------------------------------------------------
-# TriangleMesh  (per-mesh BVH wrapper)
-# ---------------------------------------------------------------------------
-
-class TriangleMesh:
-    """A collection of Triangle objects with a dedicated internal BVH.
-
-    Acts as a single bounded shape in the scene-level BVH. The internal BVH
-    accelerates ray-triangle intersections within the mesh.
-    """
-
-    def __init__(self, triangles: 'list[Triangle]'):
-        from bvh import BVH, AABB
-        self._triangles = triangles
-        self._bvh = BVH.build(triangles)
-        if self._bvh.root is not None:
-            self._aabb = self._bvh.root.aabb
-        else:
-            self._aabb = AABB(Vec3(0, 0, 0), Vec3(0, 0, 0))
-
-    def hit(self, ray, t_min: float = 0.001, t_max: float = float('inf')) -> Optional[HitRecord]:
-        hit_rec, _obj = self._bvh.hit(ray, t_min, t_max)
-        return hit_rec  # mat_obj already set to Triangle by Triangle.hit()
-
-    def bounding_box(self):
-        return self._aabb
-
-
-# ---------------------------------------------------------------------------
-# TransformedShape
-# ---------------------------------------------------------------------------
-
-class TransformedShape:
-    """Wraps any shape (primitive or CSG) with an affine Transform.
-
-    Ray intersection strategy:
-      1. Transform the incoming ray into object space using the inverse matrix.
-      2. Intersect with the wrapped shape in object space.
-      3. Transform the hit point and normal back to world space.
-
-    The t parameter is correctly scaled so world-space t_min / t_max constraints work:
-      - Object-space direction length = |inv * world_dir| = d_obj_len
-      - t bounds are scaled by d_obj_len before passing to the child shape
-      - Returned t is divided by d_obj_len to recover world-space t
-    """
-
-    def __init__(self, shape, transform: 'Transform'):
-        self.shape     = shape
-        self.transform = transform
-
-    def __repr__(self) -> str:
-        return f"TransformedShape(shape={self.shape!r}, transform={self.transform!r})"
-
-    def hit(self, ray, t_min: float, t_max: float):
-        from ray import VisionRay as _VisionRay
-        inv = self.transform.inverse_matrix()
-
-        # Transform ray origin and direction into object space.
-        o_obj     = inv.transform_point(ray.origin)
-        d_obj_raw = inv.transform_direction(ray.direction)  # not unit-length after scale
-        d_obj_len = d_obj_raw.length()
-
-        if d_obj_len < 1e-12:
-            return None
-
-        # VisionRay.__init__ normalises direction to unit length.
-        # t values from the child are in terms of that normalised direction.
-        # Scaling bounds by d_obj_len and dividing returned t by d_obj_len recovers
-        # correct world-space t. This relies on VisionRay normalising internally.
-        obj_ray = _VisionRay(o_obj, d_obj_raw)
-        rec = self.shape.hit(obj_ray, t_min * d_obj_len, t_max * d_obj_len)
-        if rec is None:
-            return None
-
-        # Convert t back to world space (t_world = t_obj / d_obj_len).
-        t_world = rec.t / d_obj_len
-
-        # Transform hit point to world space.
-        fwd_mat  = self.transform.matrix()
-        world_pt = fwd_mat.transform_point(rec.point)
-
-        # Normals transform by the transpose of the inverse matrix to remain
-        # perpendicular to the surface under non-uniform scale.
-        inv_T      = inv.transpose()
-        world_n    = inv_T.transform_direction(rec.normal).normalize()
-
-        # If the inner shape didn't set a mat_obj, use the inner shape itself so
-        # the renderer can access material attributes (color, ior, opacity, reflect).
-        mat_obj = rec.mat_obj if rec.mat_obj is not None else self.shape
-        return HitRecord(t=t_world, point=world_pt, normal=world_n,
-                         mat_obj=mat_obj)
-
-    def bounding_box(self):
-        """Return a world-space AABB enclosing the transformed child AABB."""
-        from bvh import AABB as _AABB
-        bbox = self.shape.bounding_box()
-        if bbox is None:
-            return None
-
-        mn, mx = bbox.min_pt, bbox.max_pt
-        corners = [
-            Vec3(mn.x, mn.y, mn.z), Vec3(mx.x, mn.y, mn.z),
-            Vec3(mn.x, mx.y, mn.z), Vec3(mx.x, mx.y, mn.z),
-            Vec3(mn.x, mn.y, mx.z), Vec3(mx.x, mn.y, mx.z),
-            Vec3(mn.x, mx.y, mx.z), Vec3(mx.x, mx.y, mx.z),
-        ]
-
-        mat = self.transform.matrix()
-        pts = [mat.transform_point(c) for c in corners]
-
-        return _AABB(
-            Vec3(min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)),
-            Vec3(max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)),
-        )
-
-    def hit_intervals(self, ray, t_min: float = 1e-9, t_max: float = float('inf')):
-        """CSG interval interface -- delegates to wrapped shape in object space."""
-        if not hasattr(self.shape, 'hit_intervals'):
-            raise TypeError(
-                f"TransformedShape: wrapped shape {type(self.shape).__name__!r} "
-                f"does not implement hit_intervals; cannot be used inside CSG"
-            )
-        from ray import VisionRay as _VisionRay
-        inv = self.transform.inverse_matrix()
-        o_obj     = inv.transform_point(ray.origin)
-        d_obj_raw = inv.transform_direction(ray.direction)
-        d_obj_len = d_obj_raw.length()
-        if d_obj_len < 1e-12:
-            return []
-        obj_ray  = _VisionRay(o_obj, d_obj_raw)
-        intervals = self.shape.hit_intervals(obj_ray, t_min * d_obj_len, t_max * d_obj_len)
-        inv_T = inv.transpose()
-        result = []
-        for iv in intervals:
-            result.append(HitInterval(
-                t_enter      = iv.t_enter / d_obj_len,
-                t_exit       = iv.t_exit  / d_obj_len,
-                enter_normal = inv_T.transform_direction(iv.enter_normal).normalize(),
-                exit_normal  = inv_T.transform_direction(iv.exit_normal).normalize(),
-                enter_obj    = iv.enter_obj,
-                exit_obj     = iv.exit_obj,
-            ))
-        return result

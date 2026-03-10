@@ -1,7 +1,7 @@
 # tests/test_new_parser_transform.py
 import sys, os, pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from new_parser import parse_scene
+from parsers.pow_adapter import parse_scene
 from shapes import TransformedShape, Sphere, Transform
 import tempfile
 

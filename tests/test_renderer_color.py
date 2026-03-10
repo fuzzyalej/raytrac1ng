@@ -1,15 +1,16 @@
 # tests/test_renderer_color.py
 from color import Color
+from material import Material
 from scene import Scene, Camera, Light
-from shapes import Sphere
+from shapes import Sphere, Plane
 from vector import Vec3
-from renderer import render
+from rendering import render
 
 def _make_scene(sphere_color: Color) -> Scene:
     scene = Scene()
     scene.camera = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0), fov=60)
     scene.lights = [Light(position=Vec3(0, 10, -10))]
-    scene.objects = [Sphere(Vec3(0, 0, 0), 1.0, color=sphere_color)]
+    scene.objects = [Sphere(Vec3(0, 0, 0), 1.0, material=Material(color=sphere_color))]
     return scene
 
 def test_render_returns_color_objects():
@@ -43,7 +44,8 @@ def test_background_is_dark():
 def test_fully_transparent_sphere_shows_background():
     """A sphere with opacity=0 is invisible — center pixel is the background color."""
     scene = _make_scene(Color(1.0, 0.0, 0.0))
-    scene.objects = [Sphere(Vec3(0, 0, 0), 1.0, color=Color(1.0, 0.0, 0.0), opacity=0.0)]
+    scene.objects = [Sphere(Vec3(0, 0, 0), 1.0,
+                             material=Material(color=Color(1.0, 0.0, 0.0), opacity=0.0))]
     pixels = render(scene, 50, 50)
     center = pixels[25 * 50 + 25]
     # Background is Color(0.05, 0.05, 0.08) — should be very close to it
@@ -61,8 +63,10 @@ def test_semi_transparent_sphere_blends_colors():
     scene.camera = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0), fov=60)
     scene.lights = [Light(position=Vec3(0, 10, -10))]
     scene.objects = [
-        Sphere(Vec3(0, 0, 0), 0.4, color=Color(0.0, 0.0, 1.0), opacity=1.0),   # blue, behind
-        Sphere(Vec3(0, 0, -1.5), 0.8, color=Color(1.0, 0.0, 0.0), opacity=0.5), # red, in front
+        Sphere(Vec3(0, 0, 0), 0.4,
+               material=Material(color=Color(0.0, 0.0, 1.0), opacity=1.0)),   # blue, behind
+        Sphere(Vec3(0, 0, -1.5), 0.8,
+               material=Material(color=Color(1.0, 0.0, 0.0), opacity=0.5)),   # red, in front
     ]
     pixels = render(scene, 50, 50)
     center = pixels[25 * 50 + 25]
@@ -79,7 +83,8 @@ def test_opaque_sphere_unchanged():
     pixels1 = render(scene1, 50, 50)
 
     scene2 = _make_scene(Color(1.0, 0.0, 0.0))
-    scene2.objects = [Sphere(Vec3(0, 0, 0), 1.0, color=Color(1.0, 0.0, 0.0), opacity=1.0)]
+    scene2.objects = [Sphere(Vec3(0, 0, 0), 1.0,
+                              material=Material(color=Color(1.0, 0.0, 0.0), opacity=1.0))]
     pixels2 = render(scene2, 50, 50)
 
     c1 = pixels1[25 * 50 + 25]
@@ -92,7 +97,7 @@ def test_opaque_sphere_unchanged():
 def test_render_empty_scene():
     """A scene with no objects renders to background color."""
     from scene import Scene, Camera, Light
-    from renderer import render
+    from rendering import render
     from color import Color
     from vector import Vec3
     camera = Camera(location=Vec3(0, 0, -5), look_at=Vec3(0, 0, 0), fov=60)
@@ -108,13 +113,15 @@ def test_render_empty_scene():
 def test_render_all_planes_scene():
     """A scene with only Plane objects (no BVH-bounded objects) renders correctly."""
     from scene import Scene, Camera, Light
-    from renderer import render
+    from rendering import render
     from shapes import Plane
     from color import Color
+    from material import Material
     from vector import Vec3
     camera = Camera(location=Vec3(0, 5, -10), look_at=Vec3(0, 0, 0), fov=60)
     light = Light(position=Vec3(5, 10, -5))
-    plane = Plane(Vec3(0, 1, 0), 0, Color(0.8, 0.8, 0.8))  # horizontal ground plane
+    plane = Plane(Vec3(0, 1, 0), 0,
+                  material=Material(color=Color(0.8, 0.8, 0.8)))  # horizontal ground plane
     scene = Scene(camera=camera, lights=[light], objects=[plane])
     pixels = render(scene, 10, 10)
     assert len(pixels) == 100

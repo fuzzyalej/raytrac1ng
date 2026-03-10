@@ -2,19 +2,23 @@
 
 import pytest
 from color import Color
+from material import Material
 from scene import Scene, Camera, Light
 from shapes import Sphere, Plane
 from vector import Vec3
-from renderer import render
+from rendering import render
 
 
 def _scene_with_mirror_sphere():
     """A red sphere reflected in a mirror sphere."""
     cam = Camera(Vec3(0, 1, -5), Vec3(0, 1, 0), fov=60)
     light = Light(Vec3(5, 5, -5))
-    mirror = Sphere(Vec3(-1.5, 1, 0), 1.0, Color(1, 1, 1), opacity=1.0, reflect=1.0)
-    red    = Sphere(Vec3(1.5, 1, 0),  1.0, Color(1, 0, 0), opacity=1.0, reflect=0.0)
-    ground = Plane(Vec3(0, 1, 0), 0.0, Color(0.8, 0.8, 0.8), opacity=1.0, reflect=0.3)
+    mirror = Sphere(Vec3(-1.5, 1, 0), 1.0,
+                    material=Material(color=Color(1, 1, 1), opacity=1.0, reflect=1.0))
+    red    = Sphere(Vec3(1.5, 1, 0),  1.0,
+                    material=Material(color=Color(1, 0, 0), opacity=1.0, reflect=0.0))
+    ground = Plane(Vec3(0, 1, 0), 0.0,
+                   material=Material(color=Color(0.8, 0.8, 0.8), opacity=1.0, reflect=0.3))
     return Scene(camera=cam, lights=[light], objects=[mirror, red, ground])
 
 
@@ -22,7 +26,8 @@ def test_reflect_zero_colors_in_range():
     """reflect=0 must produce valid colors."""
     cam = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0), fov=60)
     light = Light(Vec3(5, 5, -5))
-    s = Sphere(Vec3(0, 0, 0), 1.0, Color(1, 0, 0), reflect=0.0)
+    s = Sphere(Vec3(0, 0, 0), 1.0,
+               material=Material(color=Color(1, 0, 0), reflect=0.0))
     scene = Scene(camera=cam, lights=[light], objects=[s])
     pixels = render(scene, 8, 6)
     for p in pixels:
@@ -58,10 +63,10 @@ def test_mirror_sphere_reflects_red():
 
 def test_reflect_clamped_at_construction():
     """reflect is clamped to [0, 1] at object construction time."""
-    s = Sphere(Vec3(0, 0, 0), 1.0, reflect=2.0)
-    assert s.reflect == 1.0
-    s2 = Sphere(Vec3(0, 0, 0), 1.0, reflect=-0.5)
-    assert s2.reflect == 0.0
+    s = Sphere(Vec3(0, 0, 0), 1.0, material=Material(reflect=2.0))
+    assert s.material.reflect == 1.0
+    s2 = Sphere(Vec3(0, 0, 0), 1.0, material=Material(reflect=-0.5))
+    assert s2.material.reflect == 0.0
 
 
 def test_partial_reflection_differs_from_matte():
@@ -69,8 +74,10 @@ def test_partial_reflection_differs_from_matte():
     cam = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0), fov=60)
     light = Light(Vec3(5, 5, -5))
 
-    matte  = Sphere(Vec3(0, 0, 0), 1.0, Color(0, 0, 1), reflect=0.0)
-    mirror = Sphere(Vec3(0, 0, 0), 1.0, Color(0, 0, 1), reflect=1.0)
+    matte  = Sphere(Vec3(0, 0, 0), 1.0,
+                    material=Material(color=Color(0, 0, 1), reflect=0.0))
+    mirror = Sphere(Vec3(0, 0, 0), 1.0,
+                    material=Material(color=Color(0, 0, 1), reflect=1.0))
 
     px_matte  = render(Scene(camera=cam, lights=[light], objects=[matte]),  8, 6)
     px_mirror = render(Scene(camera=cam, lights=[light], objects=[mirror]), 8, 6)

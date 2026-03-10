@@ -53,7 +53,7 @@ def test_torus_offset_center():
 
 def test_torus_default_material():
     torus = Torus(Vec3(0, 0, 0), Vec3(0, 1, 0), 2.0, 0.5)
-    assert torus.color == Color(1.0, 1.0, 1.0)
-    assert torus.opacity == 1.0
-    assert torus.reflect == 0.0
-    assert torus.ior == 1.0
+    assert torus.material.color == Color(1.0, 1.0, 1.0)
+    assert torus.material.opacity == 1.0
+    assert torus.material.reflect == 0.0
+    assert torus.material.ior == 1.0

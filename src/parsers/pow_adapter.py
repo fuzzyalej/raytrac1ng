@@ -4,7 +4,7 @@ Adapter: parses a .pow file using lang_parser and builds a Scene.
 import os
 from pathlib import Path
 
-from lang_parser import (
+from .pow_parser import (
     parse_source,
     SceneCamera, SceneLight,
     SceneSphere, ScenePlane, SceneBox,
@@ -20,6 +20,7 @@ from shapes import Transform, TransformedShape  # NEW
 from obj_loader import load_obj
 from vector import Vec3
 from color import Color
+from material import Material
 
 
 def _v(t) -> Vec3:
@@ -46,31 +47,34 @@ def _maybe_wrap(shape, item):
 def _build_shape(item):
     """Recursively convert a scene item dataclass to a shape object."""
     if isinstance(item, SceneSphere):
-        shape = Sphere(center=_v(item.center), radius=item.radius,
-                       color=_c(item.color), opacity=item.opacity,
+        mat = Material(color=_c(item.color), opacity=item.opacity,
                        reflect=item.reflect, ior=item.ior)
+        shape = Sphere(center=_v(item.center), radius=item.radius, material=mat)
         return _maybe_wrap(shape, item)
     if isinstance(item, SceneBox):
-        shape = Box(min_pt=_v(item.min), max_pt=_v(item.max),
-                    color=_c(item.color), opacity=item.opacity,
-                    reflect=item.reflect, ior=item.ior)
+        mat = Material(color=_c(item.color), opacity=item.opacity,
+                       reflect=item.reflect, ior=item.ior)
+        shape = Box(min_pt=_v(item.min), max_pt=_v(item.max), material=mat)
         return _maybe_wrap(shape, item)
     if isinstance(item, SceneCylinder):
+        mat = Material(color=_c(item.color), opacity=item.opacity,
+                       reflect=item.reflect, ior=item.ior)
         shape = Cylinder(bottom=_v(item.bottom), top=_v(item.top),
-                         radius=item.radius, color=_c(item.color),
-                         opacity=item.opacity, reflect=item.reflect, ior=item.ior)
+                         radius=item.radius, material=mat)
         return _maybe_wrap(shape, item)
     if isinstance(item, SceneCone):
+        mat = Material(color=_c(item.color), opacity=item.opacity,
+                       reflect=item.reflect, ior=item.ior)
         shape = Cone(bottom=_v(item.bottom), top=_v(item.top),
                      bottom_radius=item.bottom_radius, top_radius=item.top_radius,
-                     color=_c(item.color), opacity=item.opacity,
-                     reflect=item.reflect, ior=item.ior)
+                     material=mat)
         return _maybe_wrap(shape, item)
     if isinstance(item, SceneTorus):
+        mat = Material(color=_c(item.color), opacity=item.opacity,
+                       reflect=item.reflect, ior=item.ior)
         shape = Torus(center=_v(item.center), axis=_v(item.axis),
                       major_radius=item.major_radius, minor_radius=item.minor_radius,
-                      color=_c(item.color), opacity=item.opacity,
-                      reflect=item.reflect, ior=item.ior)
+                      material=mat)
         return _maybe_wrap(shape, item)
     if isinstance(item, SceneCSGUnion):
         children = [_build_shape(c) for c in item.children]
@@ -125,13 +129,12 @@ def parse_scene(path: str) -> Scene:
             ))
 
         elif isinstance(item, ScenePlane):
+            mat = Material(color=_c(item.color), opacity=item.opacity,
+                           reflect=item.reflect, ior=item.ior)
             shape = Plane(
                 normal=_v(item.normal),
                 offset=item.offset,
-                color=_c(item.color),
-                opacity=item.opacity,
-                reflect=item.reflect,
-                ior=item.ior,
+                material=mat,
             )
             scene.objects.append(_maybe_wrap(shape, item))
 

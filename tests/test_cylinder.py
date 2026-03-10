@@ -68,7 +68,7 @@ def test_cylinder_tilted_axis():
 
 def test_cylinder_default_material():
     cyl = Cylinder(Vec3(0, 0, 0), Vec3(0, 1, 0), radius=1.0)
-    assert cyl.color == Color(1.0, 1.0, 1.0)
-    assert cyl.opacity == 1.0
-    assert cyl.reflect == 0.0
-    assert cyl.ior == 1.0
+    assert cyl.material.color == Color(1.0, 1.0, 1.0)
+    assert cyl.material.opacity == 1.0
+    assert cyl.material.reflect == 0.0
+    assert cyl.material.ior == 1.0

@@ -1,6 +1,6 @@
 # tests/test_parser_color.py
 import textwrap, tempfile, os
-from parser import parse_scene
+from parsers.pov import parse_scene
 from color import Color
 
 def _write_scene(content: str) -> str:
@@ -18,9 +18,9 @@ def test_sphere_raw_color():
     scene = parse_scene(path)
     os.unlink(path)
     sphere = scene.objects[0]
-    assert abs(sphere.color.r - 1.0) < 1e-6
-    assert abs(sphere.color.g - 0.0) < 1e-6
-    assert abs(sphere.color.b - 0.0) < 1e-6
+    assert abs(sphere.material.color.r - 1.0) < 1e-6
+    assert abs(sphere.material.color.g - 0.0) < 1e-6
+    assert abs(sphere.material.color.b - 0.0) < 1e-6
 
 def test_sphere_named_color():
     path = _write_scene("""
@@ -31,7 +31,7 @@ def test_sphere_named_color():
     scene = parse_scene(path)
     os.unlink(path)
     sphere = scene.objects[0]
-    assert sphere.color == Color(0.0, 0.0, 1.0)
+    assert sphere.material.color == Color(0.0, 0.0, 1.0)
 
 def test_plane_named_color():
     path = _write_scene("""
@@ -42,7 +42,7 @@ def test_plane_named_color():
     scene = parse_scene(path)
     os.unlink(path)
     plane = scene.objects[0]
-    assert plane.color == Color(0.5, 0.5, 0.5)
+    assert plane.material.color == Color(0.5, 0.5, 0.5)
 
 def test_sphere_no_color_defaults_to_white():
     path = _write_scene("""
@@ -53,7 +53,7 @@ def test_sphere_no_color_defaults_to_white():
     scene = parse_scene(path)
     os.unlink(path)
     sphere = scene.objects[0]
-    assert sphere.color == Color(1.0, 1.0, 1.0)
+    assert sphere.material.color == Color(1.0, 1.0, 1.0)
 
 def test_sphere_opacity():
     path = _write_scene("""
@@ -63,7 +63,7 @@ def test_sphere_opacity():
     """)
     scene = parse_scene(path)
     os.unlink(path)
-    assert abs(scene.objects[0].opacity - 0.5) < 1e-6
+    assert abs(scene.objects[0].material.opacity - 0.5) < 1e-6
 
 def test_sphere_no_opacity_defaults_to_opaque():
     path = _write_scene("""
@@ -73,7 +73,7 @@ def test_sphere_no_opacity_defaults_to_opaque():
     """)
     scene = parse_scene(path)
     os.unlink(path)
-    assert scene.objects[0].opacity == 1.0
+    assert scene.objects[0].material.opacity == 1.0
 
 def test_plane_opacity():
     path = _write_scene("""
@@ -83,7 +83,7 @@ def test_plane_opacity():
     """)
     scene = parse_scene(path)
     os.unlink(path)
-    assert abs(scene.objects[0].opacity - 0.25) < 1e-6
+    assert abs(scene.objects[0].material.opacity - 0.25) < 1e-6
 
 def test_light_default_radius_and_samples(tmp_path):
     pov = tmp_path / "s.pov"
@@ -116,7 +116,7 @@ def test_sphere_ior_parsed():
     """)
     scene = parse_scene(path)
     os.unlink(path)
-    assert abs(scene.objects[0].ior - 1.5) < 1e-6
+    assert abs(scene.objects[0].material.ior - 1.5) < 1e-6
 
 
 def test_sphere_default_ior_when_absent():
@@ -127,7 +127,7 @@ def test_sphere_default_ior_when_absent():
     """)
     scene = parse_scene(path)
     os.unlink(path)
-    assert scene.objects[0].ior == 1.0
+    assert scene.objects[0].material.ior == 1.0
 
 
 def test_plane_ior_parsed():
@@ -138,4 +138,4 @@ def test_plane_ior_parsed():
     """)
     scene = parse_scene(path)
     os.unlink(path)
-    assert abs(scene.objects[0].ior - 1.33) < 1e-6
+    assert abs(scene.objects[0].material.ior - 1.33) < 1e-6

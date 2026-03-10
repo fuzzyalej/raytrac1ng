@@ -8,7 +8,8 @@ from ray import VisionRay
 from bvh import AABB
 
 def _sphere():
-    return Sphere(center=Vec3(0,0,0), radius=1.0, color=Color(1,1,1))
+    from material import Material
+    return Sphere(center=Vec3(0,0,0), radius=1.0, material=Material(color=Color(1,1,1)))
 
 def _ray(ox, oy, oz, dx, dy, dz):
     return VisionRay(Vec3(ox, oy, oz), Vec3(dx, dy, dz))

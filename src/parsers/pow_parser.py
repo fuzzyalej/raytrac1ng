@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from lexer import tokenise, Token, TT
+from .pow_lexer import tokenise, Token, TT
 
 
 # ---------------------------------------------------------------------------

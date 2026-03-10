@@ -1,7 +1,7 @@
 """Parser tests for Box, Cylinder, Cone, and Torus blocks."""
 import textwrap, tempfile, os
 
-from parser import parse_scene
+from parsers.pov import parse_scene
 from shapes import Box, Cylinder, Cone, Torus
 from vector import Vec3
 
@@ -37,9 +37,9 @@ def test_parse_box_defaults():
     scene = parse_scene(path)
     os.unlink(path)
     obj = scene.objects[0]
-    assert obj.opacity == 1.0
-    assert obj.reflect == 0.0
-    assert obj.ior == 1.0
+    assert obj.material.opacity == 1.0
+    assert obj.material.reflect == 0.0
+    assert obj.material.ior == 1.0
 
 
 def test_parse_cylinder():

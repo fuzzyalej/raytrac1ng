@@ -16,6 +16,7 @@ from vector import Vec3
 from scene import Camera, Light, Scene
 from shapes import Sphere, Plane, Box, Cylinder, Cone, Torus
 from color import Color, NAMED_COLORS
+from material import Material
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +137,8 @@ def parse_scene(filepath: str) -> Scene:
                 ior = _parse_float(body, 'ior')
             except ValueError:
                 ior = 1.0
-            scene.objects.append(Sphere(center, radius, color, opacity, reflect=reflect, ior=ior))
+            mat = Material(color=color, opacity=opacity, reflect=reflect, ior=ior)
+            scene.objects.append(Sphere(center, radius, material=mat))
 
         elif block_type == 'plane':
             normal = _parse_vec3_for_key(body, 'normal')
@@ -154,7 +156,8 @@ def parse_scene(filepath: str) -> Scene:
                 ior = _parse_float(body, 'ior')
             except ValueError:
                 ior = 1.0
-            scene.objects.append(Plane(normal, offset, color, opacity, reflect=reflect, ior=ior))
+            mat = Material(color=color, opacity=opacity, reflect=reflect, ior=ior)
+            scene.objects.append(Plane(normal, offset, material=mat))
 
         elif block_type == 'box':
             min_pt = _parse_vec3_for_key(body, 'min')
@@ -172,8 +175,8 @@ def parse_scene(filepath: str) -> Scene:
                 ior = _parse_float(body, 'ior')
             except ValueError:
                 ior = 1.0
-            scene.objects.append(Box(min_pt, max_pt, color, opacity,
-                                     reflect=reflect, ior=ior))
+            mat = Material(color=color, opacity=opacity, reflect=reflect, ior=ior)
+            scene.objects.append(Box(min_pt, max_pt, material=mat))
 
         elif block_type == 'cylinder':
             bottom = _parse_vec3_for_key(body, 'bottom')
@@ -192,8 +195,8 @@ def parse_scene(filepath: str) -> Scene:
                 ior = _parse_float(body, 'ior')
             except ValueError:
                 ior = 1.0
-            scene.objects.append(Cylinder(bottom, top, radius, color, opacity,
-                                          reflect=reflect, ior=ior))
+            mat = Material(color=color, opacity=opacity, reflect=reflect, ior=ior)
+            scene.objects.append(Cylinder(bottom, top, radius, material=mat))
 
         elif block_type == 'cone':
             bottom        = _parse_vec3_for_key(body, 'bottom')
@@ -213,8 +216,9 @@ def parse_scene(filepath: str) -> Scene:
                 ior = _parse_float(body, 'ior')
             except ValueError:
                 ior = 1.0
+            mat = Material(color=color, opacity=opacity, reflect=reflect, ior=ior)
             scene.objects.append(Cone(bottom, top, bottom_radius, top_radius,
-                                      color, opacity, reflect=reflect, ior=ior))
+                                      material=mat))
 
         elif block_type == 'torus':
             center       = _parse_vec3_for_key(body, 'center')
@@ -234,8 +238,9 @@ def parse_scene(filepath: str) -> Scene:
                 ior = _parse_float(body, 'ior')
             except ValueError:
                 ior = 1.0
+            mat = Material(color=color, opacity=opacity, reflect=reflect, ior=ior)
             scene.objects.append(Torus(center, axis, major_radius, minor_radius,
-                                       color, opacity, reflect=reflect, ior=ior))
+                                       material=mat))
 
         else:
             print(f"Warning: unknown block type '{block_type}', skipping.")

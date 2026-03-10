@@ -77,7 +77,7 @@ def test_cone_frustum_hit_top_cap():
 
 def test_cone_default_material():
     cone = Cone(Vec3(0, 0, 0), Vec3(0, 1, 0), 1.0, 0.5)
-    assert cone.color == Color(1.0, 1.0, 1.0)
-    assert cone.opacity == 1.0
-    assert cone.reflect == 0.0
-    assert cone.ior == 1.0
+    assert cone.material.color == Color(1.0, 1.0, 1.0)
+    assert cone.material.opacity == 1.0
+    assert cone.material.reflect == 0.0
+    assert cone.material.ior == 1.0
