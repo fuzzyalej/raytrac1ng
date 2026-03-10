@@ -63,7 +63,136 @@ class Vec3:
     def __repr__(self) -> str:
         return f"Vec3({self.x:.4f}, {self.y:.4f}, {self.z:.4f})"
 
+    def __len__(self) -> int:
+        return 3
+
     def __iter__(self):
         yield self.x
         yield self.y
         yield self.z
+
+
+class Matrix4x4:
+    """Row-major 4x4 matrix for affine transforms.
+
+    Stored as a flat list of 16 floats in row-major order:
+        m[row*4 + col]
+    """
+
+    __slots__ = ('m',)
+
+    def __init__(self, m=None):
+        """m: iterable of 16 floats (row-major). Default: identity."""
+        if m is None:
+            self.m = [1.0,0.0,0.0,0.0,
+                      0.0,1.0,0.0,0.0,
+                      0.0,0.0,1.0,0.0,
+                      0.0,0.0,0.0,1.0]
+        else:
+            self.m = [float(x) for x in m]
+
+    def __matmul__(self, other: 'Matrix4x4') -> 'Matrix4x4':
+        a, b = self.m, other.m
+        result = [0.0] * 16
+        for row in range(4):
+            for col in range(4):
+                result[row*4+col] = sum(a[row*4+k] * b[k*4+col] for k in range(4))
+        return Matrix4x4(result)
+
+    def transform_point(self, v: 'Vec3') -> 'Vec3':
+        """Apply full matrix (including translation) to a point."""
+        m = self.m
+        x = m[0]*v.x + m[1]*v.y + m[2]*v.z + m[3]
+        y = m[4]*v.x + m[5]*v.y + m[6]*v.z + m[7]
+        z = m[8]*v.x + m[9]*v.y + m[10]*v.z + m[11]
+        w = m[12]*v.x + m[13]*v.y + m[14]*v.z + m[15]
+        if w != 1.0 and w != 0.0:
+            return Vec3(x/w, y/w, z/w)
+        return Vec3(x, y, z)
+
+    def transform_direction(self, v: 'Vec3') -> 'Vec3':
+        """Apply rotation/scale only (no translation) to a direction vector."""
+        m = self.m
+        x = m[0]*v.x + m[1]*v.y + m[2]*v.z
+        y = m[4]*v.x + m[5]*v.y + m[6]*v.z
+        z = m[8]*v.x + m[9]*v.y + m[10]*v.z
+        return Vec3(x, y, z)
+
+    def transpose(self) -> 'Matrix4x4':
+        m = self.m
+        return Matrix4x4([
+            m[0],  m[4],  m[8],  m[12],
+            m[1],  m[5],  m[9],  m[13],
+            m[2],  m[6],  m[10], m[14],
+            m[3],  m[7],  m[11], m[15],
+        ])
+
+    def inverse(self) -> 'Matrix4x4':
+        """Gauss-Jordan elimination on augmented [M | I]."""
+        aug = []
+        for r in range(4):
+            row = [float(self.m[r*4+c]) for c in range(4)]
+            row += [1.0 if c == r else 0.0 for c in range(4)]
+            aug.append(row)
+
+        for col in range(4):
+            pivot_row = max(range(col, 4), key=lambda r: abs(aug[r][col]))
+            if abs(aug[pivot_row][col]) < 1e-12:
+                raise ValueError("Matrix4x4.inverse: singular matrix")
+            aug[col], aug[pivot_row] = aug[pivot_row], aug[col]
+            pivot = aug[col][col]
+            aug[col] = [x / pivot for x in aug[col]]
+            for r in range(4):
+                if r != col:
+                    f = aug[r][col]
+                    aug[r] = [aug[r][c] - f * aug[col][c] for c in range(8)]
+
+        result = []
+        for r in range(4):
+            result.extend(aug[r][4:])
+        return Matrix4x4(result)
+
+    @staticmethod
+    def from_trs(scale: tuple, rotate: tuple, translate: tuple) -> 'Matrix4x4':
+        """Build combined TRS matrix: Scale -> Rotate (XYZ euler) -> Translate.
+
+        rotate: (rx, ry, rz) euler angles in degrees.
+        Rotation order: Rx * Ry * Rz  (intrinsic XYZ).
+        Full matrix: T * Rx * Ry * Rz * S
+        """
+        sx, sy, sz = scale
+        rx_d, ry_d, rz_d = rotate
+        tx, ty, tz = translate
+
+        rx = math.radians(rx_d)
+        ry = math.radians(ry_d)
+        rz = math.radians(rz_d)
+
+        cx, sx_ = math.cos(rx), math.sin(rx)
+        cy, sy_ = math.cos(ry), math.sin(ry)
+        cz, sz_ = math.cos(rz), math.sin(rz)
+
+        Rx = Matrix4x4([1, 0,   0,    0,
+                        0, cx,  -sx_, 0,
+                        0, sx_,  cx,  0,
+                        0, 0,   0,    1])
+        Ry = Matrix4x4([cy,  0, sy_, 0,
+                        0,   1, 0,   0,
+                        -sy_,0, cy,  0,
+                        0,   0, 0,   1])
+        Rz = Matrix4x4([cz, -sz_, 0, 0,
+                        sz_, cz,  0, 0,
+                        0,   0,   1, 0,
+                        0,   0,   0, 1])
+
+        S = Matrix4x4([sx, 0,  0,  0,
+                       0,  sy, 0,  0,
+                       0,  0,  sz, 0,
+                       0,  0,  0,  1])
+        T = Matrix4x4([1, 0, 0, tx,
+                       0, 1, 0, ty,
+                       0, 0, 1, tz,
+                       0, 0, 0, 1])
+
+        # TRS = T * Rx * Ry * Rz * S
+        return T @ Rx @ Ry @ Rz @ S
