@@ -129,6 +129,61 @@ sphere { center (0,1,0)  radius 1.0  material glass  opacity 0.5 }
 
 ---
 
+## Transforms
+
+A `transform` bundles scale, rotation, and translation into a reusable variable:
+
+```
+let t = transform {
+  scale     (sx, sy, sz)    // non-uniform scale — or: scale N for uniform
+  rotate    (rx, ry, rz)    // XYZ euler angles in degrees — default (0,0,0)
+  translate (tx, ty, tz)    // world-space offset — default (0,0,0)
+}
+```
+
+All three fields are optional. Unspecified fields take their defaults:
+
+| Field       | Default         | Notes                                     |
+|-------------|-----------------|-------------------------------------------|
+| `scale`     | `(1, 1, 1)`     | Scalar form `scale 2.0` sets all axes     |
+| `rotate`    | `(0, 0, 0)`     | Degrees; applied X then Y then Z (intrinsic XYZ euler) |
+| `translate` | `(0, 0, 0)`     | Applied after scale and rotate            |
+
+**Transform order:** Scale → Rotate → Translate. This means the shape is first scaled in its own local space, then rotated, then moved to its final world position.
+
+Apply a transform to any shape or CSG node via `transform <name>`:
+
+```
+sphere  { center (0,0,0)  radius 1     transform t }
+mesh    { file "models/boot.obj"        transform t }
+union   { transform t  sphere { ... }  box { ... } }
+```
+
+**Examples:**
+
+```
+// Stretch a sphere into an ellipsoid
+let squish = transform { scale (2, 0.5, 1) }
+sphere { center (0, 1, 0)  radius 1  material glass  transform squish }
+
+// Rotate a box 45° around Y
+let tilted = transform { rotate (0, 45, 0) }
+box { min (-1,-1,-1)  max (1,1,1)  color (1,0,0)  transform tilted }
+
+// Scale + place a mesh model
+let boot_xf = transform { scale 0.5  rotate (0, 180, 0)  translate (0, 0, 2) }
+mesh { file "models/boot.obj"  transform boot_xf }
+
+// Reuse the same transform on multiple shapes
+let t = transform { translate (3, 0, 0) }
+sphere { center (0,0,0)  radius 0.5  transform t }
+box    { min (-0.5,-0.5,-0.5)  max (0.5,0.5,0.5)  transform t }
+```
+
+Transforms are stored as named variables — the same transform can be applied to multiple shapes and is the foundation for future keyframe animation.
+
+---
+
 ## Object Blocks
 
 All object blocks share the same structure: a keyword, braces, and key-value properties. Properties can be expressions.
