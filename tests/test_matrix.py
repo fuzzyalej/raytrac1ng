@@ -53,3 +53,7 @@ def test_direction_ignores_translation():
     m = Matrix4x4.from_trs(scale=(1,1,1), rotate=(0,0,0), translate=(99, 99, 99))
     d = m.transform_direction(Vec3(0, 1, 0))
     assert (d.x, d.y, d.z) == pytest.approx((0, 1, 0), abs=1e-6)
+
+def test_vec3_len():
+    v = Vec3(1, 2, 3)
+    assert len(v) == 3

@@ -21,18 +21,24 @@ class Transform:
     future per-component animation interpolation.
     """
 
+    __slots__ = ('scale', 'rotate', 'translate', '_mat', '_inv')
+
     def __init__(self,
-                 scale:     tuple | float = (1.0, 1.0, 1.0),
-                 rotate:    tuple = (0.0, 0.0, 0.0),
-                 translate: tuple = (0.0, 0.0, 0.0)):
+                 scale     = (1.0, 1.0, 1.0),   # tuple or scalar float; see body for handling
+                 rotate    = (0.0, 0.0, 0.0),
+                 translate = (0.0, 0.0, 0.0)):
         # Accept scalar for uniform scale
         if isinstance(scale, (int, float)):
             scale = (float(scale), float(scale), float(scale))
         self.scale     = tuple(float(x) for x in scale)
         self.rotate    = tuple(float(x) for x in rotate)
         self.translate = tuple(float(x) for x in translate)
-        self._mat: Matrix4x4 | None = None
-        self._inv: Matrix4x4 | None = None
+        if len(self.rotate) != 3:
+            raise ValueError(f"Transform: rotate must have 3 components, got {len(self.rotate)}")
+        if len(self.translate) != 3:
+            raise ValueError(f"Transform: translate must have 3 components, got {len(self.translate)}")
+        self._mat = None   # type: Optional[Matrix4x4]
+        self._inv = None   # type: Optional[Matrix4x4]
 
     def matrix(self) -> Matrix4x4:
         """Return the cached TRS matrix, building it on first call."""
@@ -43,6 +49,7 @@ class Transform:
     def inverse_matrix(self) -> Matrix4x4:
         """Return the cached inverse TRS matrix, building it on first call."""
         if self._inv is None:
+            # matrix() builds and caches _mat as a side-effect; that is intentional.
             self._inv = self.matrix().inverse()
         return self._inv
 

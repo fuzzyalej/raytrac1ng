@@ -50,4 +50,14 @@ def test_repr_contains_components():
     t = Transform(scale=(1,2,3), rotate=(10,20,30), translate=(4,5,6))
     r = repr(t)
     assert "Transform" in r
-    assert "scale" in r
+    assert "(1.0, 2.0, 3.0)" in r   # scale
+    assert "(10.0, 20.0, 30.0)" in r  # rotate
+    assert "(4.0, 5.0, 6.0)" in r    # translate
+
+def test_rotate_wrong_arity_raises():
+    with pytest.raises(ValueError, match="rotate"):
+        Transform(rotate=(1, 2))
+
+def test_translate_wrong_arity_raises():
+    with pytest.raises(ValueError, match="translate"):
+        Transform(translate=(1,))
