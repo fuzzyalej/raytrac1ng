@@ -1373,8 +1373,11 @@ class TransformedShape:
         inv_T      = inv.transpose()
         world_n    = inv_T.transform_direction(rec.normal).normalize()
 
+        # If the inner shape didn't set a mat_obj, use the inner shape itself so
+        # the renderer can access material attributes (color, ior, opacity, reflect).
+        mat = rec.mat_obj if rec.mat_obj is not None else self.shape
         return HitRecord(t=t_world, point=world_pt, normal=world_n,
-                         mat_obj=rec.mat_obj)
+                         mat_obj=mat)
 
     def bounding_box(self):
         """Return a world-space AABB enclosing the transformed child AABB."""

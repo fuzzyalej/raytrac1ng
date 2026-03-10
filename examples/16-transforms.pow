@@ -1,0 +1,24 @@
+// 16-transforms.pow — demonstrates the transform system
+// Render: python3 main.py examples/16-transforms.pow -W 800 -H 600 -o render.png
+
+camera { location (0, 4, -10)  look_at (0, 1, 0)  fov 55 }
+light  { position (5, 10, -5)  radius 1.0  samples 16 }
+
+// Ground plane
+plane { normal (0,1,0)  offset 0  color (0.7, 0.7, 0.7) }
+
+// Stretched sphere (ellipsoid) — scaled 2x on X
+let squish = transform { scale (2.0, 1.0, 1.0)  translate (-3, 1, 0) }
+sphere { center (0,0,0)  radius 1  color (0.8, 0.2, 0.2)  transform squish }
+
+// Tilted box — rotated 45° around Y
+let tilted = transform { rotate (0, 45, 0)  translate (0, 1, 0) }
+box { min (-0.7,-0.7,-0.7)  max (0.7,0.7,0.7)  color (0.2, 0.5, 0.9)  transform tilted }
+
+// Scaled and placed CSG union
+let csg_xf = transform { scale (0.8, 1.5, 0.8)  translate (3, 0, 0) }
+union {
+  transform csg_xf
+  sphere { center (0, 1, 0)  radius 0.8  color (0.3, 0.8, 0.3) }
+  cylinder { bottom (0,0,0)  top (0,1,0)  radius 0.3  color (0.3, 0.8, 0.3) }
+}
