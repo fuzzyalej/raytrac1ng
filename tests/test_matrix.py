@@ -40,9 +40,14 @@ def test_inverse_round_trip():
 def test_transpose():
     m = Matrix4x4([1,2,3,4, 5,6,7,8, 9,10,11,12, 13,14,15,16])
     t = m.transpose()
-    assert t.m[1] == pytest.approx(5, abs=1e-9)
-    assert t.m[4] == pytest.approx(2, abs=1e-9)
-    assert t.m[7] == pytest.approx(14, abs=1e-9)
+    assert t.m == pytest.approx(
+        [1,5,9,13, 2,6,10,14, 3,7,11,15, 4,8,12,16], abs=1e-9
+    )
+
+
+def test_init_wrong_length_raises():
+    with pytest.raises(ValueError, match="16 values"):
+        Matrix4x4([1, 2, 3])
 
 def test_direction_ignores_translation():
     m = Matrix4x4.from_trs(scale=(1,1,1), rotate=(0,0,0), translate=(99, 99, 99))

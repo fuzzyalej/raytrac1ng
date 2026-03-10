@@ -90,6 +90,8 @@ class Matrix4x4:
                       0.0,0.0,0.0,1.0]
         else:
             self.m = [float(x) for x in m]
+            if len(self.m) != 16:
+                raise ValueError(f"Matrix4x4 requires exactly 16 values, got {len(self.m)}")
 
     def __matmul__(self, other: 'Matrix4x4') -> 'Matrix4x4':
         a, b = self.m, other.m
@@ -99,6 +101,18 @@ class Matrix4x4:
                 result[row*4+col] = sum(a[row*4+k] * b[k*4+col] for k in range(4))
         return Matrix4x4(result)
 
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Matrix4x4):
+            return NotImplemented
+        return all(abs(a - b) < 1e-9 for a, b in zip(self.m, other.m))
+
+    def __repr__(self) -> str:
+        rows = [self.m[r*4:(r+1)*4] for r in range(4)]
+        inner = ",\n           ".join(
+            "[" + ", ".join(f"{v:.4f}" for v in row) + "]" for row in rows
+        )
+        return f"Matrix4x4([{inner}])"
+
     def transform_point(self, v: 'Vec3') -> 'Vec3':
         """Apply full matrix (including translation) to a point."""
         m = self.m
@@ -106,12 +120,18 @@ class Matrix4x4:
         y = m[4]*v.x + m[5]*v.y + m[6]*v.z + m[7]
         z = m[8]*v.x + m[9]*v.y + m[10]*v.z + m[11]
         w = m[12]*v.x + m[13]*v.y + m[14]*v.z + m[15]
-        if w != 1.0 and w != 0.0:
+        # w is 1.0 for pure affine matrices; divide only when it drifts (perspective or numerical noise)
+        if abs(w - 1.0) > 1e-9 and abs(w) > 1e-12:
             return Vec3(x/w, y/w, z/w)
         return Vec3(x, y, z)
 
     def transform_direction(self, v: 'Vec3') -> 'Vec3':
-        """Apply rotation/scale only (no translation) to a direction vector."""
+        """Apply rotation/scale only (no translation) to a direction vector.
+
+        NOTE: Do NOT use this for surface normals. Normals require transformation
+        by the transpose of the inverse matrix to remain perpendicular under
+        non-uniform scale. Use: inv.transpose().transform_direction(normal)
+        """
         m = self.m
         x = m[0]*v.x + m[1]*v.y + m[2]*v.z
         y = m[4]*v.x + m[5]*v.y + m[6]*v.z
@@ -160,7 +180,7 @@ class Matrix4x4:
         Rotation order: Rx * Ry * Rz  (intrinsic XYZ).
         Full matrix: T * Rx * Ry * Rz * S
         """
-        sx, sy, sz = scale
+        scale_x, scale_y, scale_z = scale
         rx_d, ry_d, rz_d = rotate
         tx, ty, tz = translate
 
@@ -168,27 +188,27 @@ class Matrix4x4:
         ry = math.radians(ry_d)
         rz = math.radians(rz_d)
 
-        cx, sx_ = math.cos(rx), math.sin(rx)
-        cy, sy_ = math.cos(ry), math.sin(ry)
-        cz, sz_ = math.cos(rz), math.sin(rz)
+        cos_x, sin_x = math.cos(rx), math.sin(rx)
+        cos_y, sin_y = math.cos(ry), math.sin(ry)
+        cos_z, sin_z = math.cos(rz), math.sin(rz)
 
-        Rx = Matrix4x4([1, 0,   0,    0,
-                        0, cx,  -sx_, 0,
-                        0, sx_,  cx,  0,
-                        0, 0,   0,    1])
-        Ry = Matrix4x4([cy,  0, sy_, 0,
-                        0,   1, 0,   0,
-                        -sy_,0, cy,  0,
-                        0,   0, 0,   1])
-        Rz = Matrix4x4([cz, -sz_, 0, 0,
-                        sz_, cz,  0, 0,
-                        0,   0,   1, 0,
-                        0,   0,   0, 1])
+        Rx = Matrix4x4([1, 0,      0,       0,
+                        0, cos_x,  -sin_x,  0,
+                        0, sin_x,   cos_x,  0,
+                        0, 0,      0,       1])
+        Ry = Matrix4x4([cos_y,   0, sin_y, 0,
+                        0,       1, 0,     0,
+                        -sin_y,  0, cos_y, 0,
+                        0,       0, 0,     1])
+        Rz = Matrix4x4([cos_z, -sin_z, 0, 0,
+                        sin_z,  cos_z, 0, 0,
+                        0,      0,     1, 0,
+                        0,      0,     0, 1])
 
-        S = Matrix4x4([sx, 0,  0,  0,
-                       0,  sy, 0,  0,
-                       0,  0,  sz, 0,
-                       0,  0,  0,  1])
+        S = Matrix4x4([scale_x, 0,       0,       0,
+                       0,       scale_y, 0,       0,
+                       0,       0,       scale_z, 0,
+                       0,       0,       0,       1])
         T = Matrix4x4([1, 0, 0, tx,
                        0, 1, 0, ty,
                        0, 0, 1, tz,
