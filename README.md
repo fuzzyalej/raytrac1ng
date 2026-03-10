@@ -7,6 +7,10 @@
 
 ## Changelog
 
+### v1.3 — 2026-03-10
+- Transform system: `transform { scale rotate translate }` block wraps any shape or CSG node with a full affine transform
+- Supports non-uniform scaling, arbitrary rotation, and translation; reusable across multiple shapes
+
 ### v1.2 — 2026-03-05
 - SAH BVH spatial acceleration; automatic for all scenes — no scene changes needed
 - All bounded shapes (`Sphere`, `Box`, `Cylinder`, `Cone`, `Torus`) participate in the BVH
@@ -238,6 +242,9 @@ The foundation of all math in the raytracer. A 3D vector class with:
 - **`Cone`**: Generalised frustum defined by `bottom`, `top`, `bottom_radius`, and `top_radius`. Setting `top_radius 0.0` gives a true cone apex.
 - **`Torus`**: Ring defined by `center`, `axis`, `major_radius`, and `minor_radius`. Solved analytically via Ferrari's quartic method.
 - All shape classes support optional `color`, `opacity`, `reflect`, and `ior` material fields.
+- **`TransformedShape`**: Wraps any shape (or CSG node) with a 4×4 affine transform. The ray is inverse-transformed into the shape's local space for intersection; the resulting normal is multiplied by the transposed inverse matrix and renormalised. Supports non-uniform scaling, arbitrary rotation, and translation.
+
+All shapes (sphere, box, cylinder, cone, torus, mesh, union, intersection, difference) accept a `transform` property for non-uniform scaling, rotation, and translation.
 
 #### `scene.py` — Scene Graph
 
@@ -266,7 +273,17 @@ Parses CLI arguments, calls the parser and renderer, and saves the result as a P
 
 ## POW Scene Language
 
-`.pow` is the new scene language — a proper scripting language with variables, expressions, loops, imports, and reusable materials. See **[docs/pow-reference.md](docs/pow-reference.md)** for the full reference.
+`.pow` is the new scene language — a proper scripting language with variables, expressions, loops, imports, reusable materials, and affine transforms. See **[docs/pow-reference.md](docs/pow-reference.md)** for the full reference.
+
+Key language features at a glance:
+
+- **Variables** — `let name = expr` eliminates repeated magic numbers
+- **Loops** — `for i in range(n)` generates repeated geometry programmatically
+- **Functions** — `let f = fn(a, b) { ... }` with block bodies and return values
+- **Materials** — `let m = material { color (...) opacity N reflect N ior N }` reusable across shapes
+- **Imports** — `import "path/to/file.pow"` shares material libraries across scenes
+- **CSG** — `union`, `intersection`, `difference` nodes combine shapes into composite objects
+- **Transforms** — `let t = transform { scale rotate translate }` wraps any shape or CSG node with an affine transform; reusable across shapes; foundation for future animation
 
 Quick example:
 
@@ -510,6 +527,16 @@ python3 main.py examples/01-basic.pov -W 1024 -H 768 -o render.png
 ---
 
 ## Changelog
+
+### v1.3 — Transform System (2026-03-10)
+
+- `transform { scale (sx,sy,sz) rotate (rx,ry,rz) translate (tx,ty,tz) }` block in `.pow` — wraps any shape or CSG node with a full 4×4 affine matrix
+- **Non-uniform scaling**, arbitrary Euler-angle rotation, and translation in a single composable block
+- Transform values are stored as a `TransformedShape` wrapper; the ray is inverse-transformed into local space for intersection; normals are corrected via the transposed inverse
+- Reusable: `let t = transform { ... }` can be referenced by multiple shapes, or inlined per-shape
+- Works with all primitives (sphere, box, cylinder, cone, torus, mesh) and all CSG nodes (union, intersection, difference)
+- Foundation for future keyframe animation — each frame can update transform fields
+- Example scene: `examples/16-transforms.pow`
 
 ### v1.1 — Functions & Conditionals (2026-03-04)
 
