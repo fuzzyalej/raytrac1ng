@@ -66,6 +66,24 @@ def test_plane_with_transform_gives_transformed_shape():
     assert isinstance(obj, TransformedShape)
     assert isinstance(obj.shape, Plane)
 
+def test_csg_child_with_transform_wraps_child_not_parent():
+    """Child transform wraps only the child; parent CSG is not wrapped."""
+    from shapes import CSGUnion, TransformedShape, Sphere
+    src = """
+    camera { location (0,0,-10)  look_at (0,0,0)  fov 60 }
+    let t = transform { translate (3, 0, 0) }
+    union {
+      sphere { center (0,0,0)  radius 1  transform t }
+      sphere { center (2,0,0)  radius 1 }
+    }
+    """
+    scene = _parse(src)
+    obj = scene.objects[0]
+    assert isinstance(obj, CSGUnion), "parent union should NOT be wrapped"
+    assert isinstance(obj.children[0], TransformedShape), "first child should be wrapped"
+    assert isinstance(obj.children[0].shape, Sphere)
+    assert isinstance(obj.children[1], Sphere), "second child should not be wrapped"
+
 def test_mesh_with_transform_gives_transformed_shape():
     """Mesh loaded with a transform must be wrapped in TransformedShape."""
     import os

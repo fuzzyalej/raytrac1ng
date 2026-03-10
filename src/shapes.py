@@ -1402,7 +1402,10 @@ class TransformedShape:
     def hit_intervals(self, ray, t_min: float = 1e-9, t_max: float = float('inf')):
         """CSG interval interface -- delegates to wrapped shape in object space."""
         if not hasattr(self.shape, 'hit_intervals'):
-            return []
+            raise TypeError(
+                f"TransformedShape: wrapped shape {type(self.shape).__name__!r} "
+                f"does not implement hit_intervals; cannot be used inside CSG"
+            )
         from ray import VisionRay as _VisionRay
         inv = self.transform.inverse_matrix()
         o_obj     = inv.transform_point(ray.origin)

@@ -74,17 +74,26 @@ def _build_shape(item):
         return _maybe_wrap(shape, item)
     if isinstance(item, SceneCSGUnion):
         children = [_build_shape(c) for c in item.children]
+        # Each child may already be a TransformedShape (child-level transform);
+        # the union's own transform (if any) wraps the entire node on top.
+        # This hierarchical composition is intentional — transforms apply independently.
         shape = CSGUnion(children, fuse=item.fuse,
                          color=_c(item.color) if item.color else None,
                          opacity=item.opacity, reflect=item.reflect, ior=item.ior)
         return _maybe_wrap(shape, item)
     if isinstance(item, SceneCSGIntersection):
         children = [_build_shape(c) for c in item.children]
+        # Each child may already be a TransformedShape (child-level transform);
+        # the union's own transform (if any) wraps the entire node on top.
+        # This hierarchical composition is intentional — transforms apply independently.
         shape = CSGIntersection(children,
                                 color=_c(item.color) if item.color else None,
                                 opacity=item.opacity, reflect=item.reflect, ior=item.ior)
         return _maybe_wrap(shape, item)
     if isinstance(item, SceneCSGDifference):
+        # Each child may already be a TransformedShape (child-level transform);
+        # the union's own transform (if any) wraps the entire node on top.
+        # This hierarchical composition is intentional — transforms apply independently.
         shape = CSGDifference(_build_shape(item.left), _build_shape(item.right),
                               color=_c(item.color) if item.color else None,
                               opacity=item.opacity, reflect=item.reflect, ior=item.ior)
