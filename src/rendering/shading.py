@@ -1,63 +1,60 @@
 """Lambertian shading and shadow computation."""
-import math
 import random
 from color import Color
-from vector import Vec3
 from ray import Ray
 from shapes import HitRecord
 
 
-def shadow_factor(hit_point: Vec3, light, ctx) -> float:
-    """Return the fraction of light reaching hit_point from light (0.0=fully shadowed, 1.0=fully lit).
+def _light_facing(light, hit_point) -> bool:
+    """Return True if hit_point is on the emitting side of a directional light.
 
-    For a point light (light.radius == 0), fires one shadow ray to light.position.
-    For an area light (light.radius > 0), fires light.samples rays to random points
-    on the light sphere using rejection sampling, then averages the results.
-
-    Transparent blockers attenuate the factor by (1 - opacity) instead of fully
-    blocking the ray. Multiple transparent blockers multiply their attenuation.
+    DiskLight and RectLight with two_sided=False only illuminate points on
+    their front face (same side as the light normal). All other light types
+    (PointLight, SphereLight, Light) are omnidirectional — always return True.
     """
-    n = light.samples if light.radius > 0.0 else 1
+    if getattr(light, 'two_sided', True):
+        return True
+    normal = getattr(light, 'normal', None)
+    if normal is None:
+        return True
+    # Front face: hit_point is on the same side as the light's outward normal
+    return (hit_point - light.position).dot(normal) > 0.0
+
+
+def shadow_factor(hit_point, light, ctx) -> float:
+    """Return the fraction of light reaching hit_point (0.0=shadowed, 1.0=lit).
+
+    Fires light.samples shadow rays, each to a point returned by
+    light.sample_point(). One-sided DiskLight/RectLight: hit points behind
+    the emitting face always receive 0. Transparent blockers attenuate by
+    (1 - opacity).
+    """
+    if not _light_facing(light, hit_point):
+        return 0.0
+
+    n = light.samples
     total = 0.0
 
     for _ in range(n):
-        # Pick a point on the light sphere (or the center for point lights)
-        if light.radius > 0.0:
-            # Rejection sampling: pick random point inside unit sphere, scale by radius
-            while True:
-                dx = random.uniform(-1, 1)
-                dy = random.uniform(-1, 1)
-                dz = random.uniform(-1, 1)
-                if dx*dx + dy*dy + dz*dz <= 1.0:
-                    break
-            sample = Vec3(
-                light.position.x + dx * light.radius,
-                light.position.y + dy * light.radius,
-                light.position.z + dz * light.radius,
-            )
-        else:
-            sample = light.position
+        sample = light.sample_point()
 
         to_light = sample - hit_point
         dist_to_light = to_light.length()
         if dist_to_light < 1e-6:
             continue
+
         bias = 0.001
         light_dir = to_light / dist_to_light
         shadow_ray = Ray(hit_point + light_dir * bias, light_dir)
 
-        # NOTE: shadow rays use a linear scan rather than the BVH.
-        # For most scenes (point lights, moderate object counts) this is fast enough.
-        # Area lights with thousands of objects would benefit from BVH shadow traversal.
-        # Walk all objects along the shadow ray up to the light
         light_factor = 1.0
         for obj in ctx.scene.objects:
             hit = obj.hit(shadow_ray, t_min=0.0, t_max=dist_to_light - bias)
             if hit:
-                mat_obj = hit.mat_obj if hit.mat_obj is not None else obj  # CSG routing
+                mat_obj = hit.mat_obj if hit.mat_obj is not None else obj
                 light_factor *= (1.0 - mat_obj.material.opacity)
                 if light_factor < 1e-4:
-                    break  # fully shadowed — no need to continue
+                    break
 
         total += light_factor
 
@@ -65,16 +62,17 @@ def shadow_factor(hit_point: Vec3, light, ctx) -> float:
 
 
 def shade(hit: HitRecord, obj_color: Color, ctx) -> Color:
-    """Compute shaded surface color at a hit point (Lambertian + soft shadows)."""
+    """Compute shaded surface color (Lambertian + colored lights + soft shadows)."""
     ambient = 0.15
-    total = ambient
+    result = obj_color * ambient
 
     for light in ctx.scene.lights:
         light_dir = (light.position - hit.point).normalize()
         diffuse = max(0.0, hit.normal.dot(light_dir))
         if diffuse > 0.0:
             shadow = shadow_factor(hit.point, light, ctx)
-            total += diffuse * shadow
+            if shadow > 0.0:
+                contribution = light.effective_color() * (diffuse * shadow)
+                result = result + obj_color * contribution
 
-    total = min(total, 1.0)
-    return (obj_color * total).clamp()
+    return result.clamp()

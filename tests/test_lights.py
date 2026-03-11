@@ -241,3 +241,99 @@ def test_scene_visible_lights_empty_when_none_visible():
     scene = Scene()
     scene.lights = [PointLight(position=Vec3(0,10,0))]
     assert scene.visible_lights == []
+
+
+# ---- Shading tests ----
+
+import pytest as _pytest
+
+def _make_ctx_from_scene(scene):
+    """Build a RenderContext from a scene for unit testing."""
+    from shapes import Plane as _Plane
+    from bvh import BVH
+    from rendering.renderer import RenderContext
+    bounded   = [o for o in scene.objects if not isinstance(o, _Plane)]
+    unbounded = [o for o in scene.objects if     isinstance(o, _Plane)]
+    bvh = BVH.build(bounded)
+    return RenderContext(scene=scene, bvh=bvh, unbounded=unbounded)
+
+
+def test_disk_light_one_sided_behind_gets_zero_shadow():
+    """Hit point behind a one-sided disk light gets zero shadow contribution."""
+    import random as _random
+    _random.seed(0)
+    from scene import Scene, Camera, DiskLight
+    from rendering.shading import shadow_factor
+    scene = Scene()
+    scene.camera = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0))
+    # Disk faces DOWN (-Y normal). A point ABOVE the disk (y=6) is behind the emitting face.
+    light = DiskLight(
+        position=Vec3(0, 5, 0),
+        normal=Vec3(0, -1, 0),
+        radius=2.0,
+        two_sided=False,
+        samples=8,
+    )
+    scene.lights = [light]
+    scene.objects = []
+    ctx = _make_ctx_from_scene(scene)
+    factor = shadow_factor(Vec3(0, 6, 0), light, ctx)
+    assert factor == _pytest.approx(0.0)
+
+
+def test_disk_light_two_sided_behind_gets_contribution():
+    """Hit point behind a two_sided disk still receives light."""
+    import random as _random
+    _random.seed(0)
+    from scene import Scene, Camera, DiskLight
+    from rendering.shading import shadow_factor
+    scene = Scene()
+    scene.camera = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0))
+    light = DiskLight(
+        position=Vec3(0, 5, 0),
+        normal=Vec3(0, -1, 0),
+        radius=2.0,
+        two_sided=True,
+        samples=8,
+    )
+    scene.lights = [light]
+    scene.objects = []
+    ctx = _make_ctx_from_scene(scene)
+    factor = shadow_factor(Vec3(0, 6, 0), light, ctx)
+    assert factor > 0.0
+
+
+def test_shade_colored_light_tints_surface():
+    """A red PointLight on a white surface produces a reddish result."""
+    import random as _random
+    _random.seed(0)
+    from scene import Scene, Camera, PointLight
+    from shapes.primitives import HitRecord
+    from rendering.shading import shade
+    scene = Scene()
+    scene.camera = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0))
+    scene.lights = [PointLight(position=Vec3(0, 10, 0), color=Color(1.0, 0.0, 0.0))]
+    scene.objects = []
+    ctx = _make_ctx_from_scene(scene)
+    hit = HitRecord(t=1.0, point=Vec3(0, 0, 0), normal=Vec3(0, 1, 0))
+    result = shade(hit, Color(1.0, 1.0, 1.0), ctx)
+    assert result.r > result.g
+    assert result.r > result.b
+
+
+def test_shade_warm_light_tints_surface():
+    """A 2700K light on a white surface produces a warmer (r > b) result."""
+    import random as _random
+    _random.seed(0)
+    from scene import Scene, Camera, PointLight
+    from shapes.primitives import HitRecord
+    from rendering.shading import shade
+    scene = Scene()
+    scene.camera = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0))
+    scene.lights = [PointLight(position=Vec3(0, 10, 0), color_temperature=2700)]
+    scene.objects = []
+    ctx = _make_ctx_from_scene(scene)
+    hit = HitRecord(t=1.0, point=Vec3(0, 0, 0), normal=Vec3(0, 1, 0))
+    result = shade(hit, Color(1.0, 1.0, 1.0), ctx)
+    # Warm light: result should have r > b
+    assert result.r > result.b
