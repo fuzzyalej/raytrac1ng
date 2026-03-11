@@ -1,6 +1,7 @@
 # tests/test_color.py
 import pytest
-from color import Color, NAMED_COLORS
+import math
+from color import Color, NAMED_COLORS, color_from_kelvin
 
 def test_color_creation():
     c = Color(1.0, 0.5, 0.0)
@@ -45,3 +46,34 @@ def test_named_colors_exist():
                  'purple', 'pink', 'brown', 'gray']:
         assert name in NAMED_COLORS, f"Missing named color: {name}"
     assert isinstance(NAMED_COLORS['red'], Color)
+
+def test_color_mul_color():
+    a = Color(0.5, 0.4, 0.2)
+    b = Color(1.0, 0.5, 0.0)
+    result = a * b
+    assert result.r == pytest.approx(0.5)
+    assert result.g == pytest.approx(0.2)
+    assert result.b == pytest.approx(0.0)
+
+def test_color_from_kelvin_warm():
+    # ~2700K should be warm: red channel highest, blue channel lowest
+    c = color_from_kelvin(2700)
+    assert c.r > c.b
+    assert c.r > c.g
+
+def test_color_from_kelvin_cool():
+    # ~10000K should be cool: blue channel highest
+    c = color_from_kelvin(10000)
+    assert c.b > c.r
+
+def test_color_from_kelvin_daylight():
+    # ~5500K should be close to neutral white
+    c = color_from_kelvin(5500)
+    assert c.r == pytest.approx(1.0)  # red is 1.0 for t <= 66
+
+def test_color_from_kelvin_clamps():
+    # Out-of-range inputs should not raise
+    c_low  = color_from_kelvin(100)
+    c_high = color_from_kelvin(99999)
+    for ch in (c_low.r, c_low.g, c_low.b, c_high.r, c_high.g, c_high.b):
+        assert 0.0 <= ch <= 1.0
