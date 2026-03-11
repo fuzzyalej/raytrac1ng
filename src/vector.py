@@ -60,6 +60,13 @@ class Vec3:
 
     # --- Utility ---
 
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Vec3):
+            return NotImplemented
+        return (abs(self.x - other.x) < 1e-9
+                and abs(self.y - other.y) < 1e-9
+                and abs(self.z - other.z) < 1e-9)
+
     def __repr__(self) -> str:
         return f"Vec3({self.x:.4f}, {self.y:.4f}, {self.z:.4f})"
 
