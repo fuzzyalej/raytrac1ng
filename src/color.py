@@ -14,10 +14,12 @@ class Color:
     def __add__(self, other: 'Color') -> 'Color':
         return Color(self.r + other.r, self.g + other.g, self.b + other.b)
 
-    def __mul__(self, other) -> 'Color':
+    def __mul__(self, other):
         if isinstance(other, Color):
             return Color(self.r * other.r, self.g * other.g, self.b * other.b)
-        return Color(self.r * other, self.g * other, self.b * other)
+        if isinstance(other, (int, float)):
+            return Color(self.r * other, self.g * other, self.b * other)
+        return NotImplemented
 
     def __rmul__(self, scalar: float) -> 'Color':
         return self.__mul__(scalar)
@@ -44,6 +46,7 @@ def color_from_kelvin(k: float) -> 'Color':
 
     Uses Tanner Helland's piecewise approximation (valid ~1000K–40000K).
     """
+    # Reference: https://tannerhelland.com/2012/09/18/convert-temperature-rgb-algorithm-code.html
     t = max(1000.0, min(40000.0, float(k))) / 100.0
 
     # Red
@@ -61,6 +64,7 @@ def color_from_kelvin(k: float) -> 'Color':
     # Blue
     if t >= 66:
         b = 1.0
+    # Helland's algorithm: blue is 0 below ~1900K
     elif t <= 19:
         b = 0.0
     else:

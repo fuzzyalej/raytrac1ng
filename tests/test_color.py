@@ -1,6 +1,5 @@
 # tests/test_color.py
 import pytest
-import math
 from color import Color, NAMED_COLORS, color_from_kelvin
 
 def test_color_creation():
@@ -65,6 +64,7 @@ def test_color_from_kelvin_cool():
     # ~10000K should be cool: blue channel highest
     c = color_from_kelvin(10000)
     assert c.b > c.r
+    assert c.b > c.g
 
 def test_color_from_kelvin_daylight():
     # ~5500K should be close to neutral white
