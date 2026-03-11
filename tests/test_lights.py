@@ -123,3 +123,129 @@ def test_rect_light_position_is_center():
     edge2  = Vec3(0, 0, 2)
     light  = RectLight(corner=corner, edge1=edge1, edge2=edge2)
     assert light.position == Vec3(1, 5, 1)
+
+
+# ---- LightBase is abstract ----
+
+def test_lightbase_cannot_be_instantiated():
+    """LightBase is abstract and cannot be instantiated directly."""
+    import pytest
+    with pytest.raises(TypeError):
+        LightBase()
+
+
+# ---- DiskLight.hit() ----
+
+def test_disk_light_hit_front_face():
+    """Ray from below hitting the front face of a downward-facing disk."""
+    from ray import Ray
+    light = DiskLight(position=Vec3(0, 5, 0), normal=Vec3(0, -1, 0), radius=1.0)
+    # Ray from below pointing up
+    ray = Ray(Vec3(0, 0, 0), Vec3(0, 1, 0))
+    hit = light.hit(ray)
+    assert hit is not None
+    assert hit.t == pytest.approx(5.0, abs=1e-6)
+
+
+def test_disk_light_hit_back_face_one_sided_returns_none():
+    """One-sided disk: ray hitting the back face returns None."""
+    from ray import Ray
+    light = DiskLight(position=Vec3(0, 5, 0), normal=Vec3(0, -1, 0),
+                      radius=1.0, two_sided=False)
+    # Ray from above hitting the back side of the downward-facing disk
+    ray = Ray(Vec3(0, 10, 0), Vec3(0, -1, 0))
+    hit = light.hit(ray)
+    assert hit is None
+
+
+def test_disk_light_hit_back_face_two_sided_returns_hit():
+    """Two-sided disk: ray hitting the back face returns a HitRecord."""
+    from ray import Ray
+    light = DiskLight(position=Vec3(0, 5, 0), normal=Vec3(0, -1, 0),
+                      radius=1.0, two_sided=True)
+    ray = Ray(Vec3(0, 10, 0), Vec3(0, -1, 0))
+    hit = light.hit(ray)
+    assert hit is not None
+
+
+def test_disk_light_hit_miss_outside_radius():
+    """Ray that hits the disk plane but outside the radius returns None."""
+    from ray import Ray
+    light = DiskLight(position=Vec3(0, 5, 0), normal=Vec3(0, -1, 0), radius=1.0)
+    ray = Ray(Vec3(5, 0, 0), Vec3(0, 1, 0))  # offset far to the side
+    hit = light.hit(ray)
+    assert hit is None
+
+
+# ---- RectLight.hit() ----
+
+def test_rect_light_hit_front_face():
+    """Ray hitting the front face of a rect light."""
+    from ray import Ray
+    corner = Vec3(-1, 5, -1)
+    edge1  = Vec3(2, 0, 0)
+    edge2  = Vec3(0, 0, 2)
+    light  = RectLight(corner=corner, edge1=edge1, edge2=edge2)
+    # Normal is cross(edge1, edge2) = cross((2,0,0),(0,0,2)) = (0,-4,0) -> norm (0,-1,0)
+    # So the rect faces downward. Ray from below going up hits front face.
+    ray = Ray(Vec3(0, 0, 0), Vec3(0, 1, 0))
+    hit = light.hit(ray)
+    assert hit is not None
+    assert hit.t == pytest.approx(5.0, abs=1e-6)
+
+
+def test_rect_light_hit_back_face_one_sided_returns_none():
+    """One-sided rect: ray from the back returns None."""
+    from ray import Ray
+    corner = Vec3(-1, 5, -1)
+    edge1  = Vec3(2, 0, 0)
+    edge2  = Vec3(0, 0, 2)
+    light  = RectLight(corner=corner, edge1=edge1, edge2=edge2, two_sided=False)
+    ray = Ray(Vec3(0, 10, 0), Vec3(0, -1, 0))
+    # Normal is (0,-1,0); denom = (0,-1,0)·(0,-1,0) = 1 > 0 → back face
+    hit = light.hit(ray)
+    assert hit is None
+
+
+def test_rect_light_hit_back_face_two_sided_returns_hit():
+    """Two-sided rect: ray from the back returns a HitRecord."""
+    from ray import Ray
+    corner = Vec3(-1, 5, -1)
+    edge1  = Vec3(2, 0, 0)
+    edge2  = Vec3(0, 0, 2)
+    light  = RectLight(corner=corner, edge1=edge1, edge2=edge2, two_sided=True)
+    ray = Ray(Vec3(0, 10, 0), Vec3(0, -1, 0))
+    hit = light.hit(ray)
+    assert hit is not None
+
+
+def test_rect_light_hit_miss_outside_bounds():
+    """Ray that hits the plane but outside the rectangle returns None."""
+    from ray import Ray
+    corner = Vec3(-1, 5, -1)
+    edge1  = Vec3(2, 0, 0)
+    edge2  = Vec3(0, 0, 2)
+    light  = RectLight(corner=corner, edge1=edge1, edge2=edge2)
+    ray = Ray(Vec3(10, 0, 0), Vec3(0, 1, 0))  # far to the side
+    hit = light.hit(ray)
+    assert hit is None
+
+
+# ---- Scene.visible_lights ----
+
+def test_scene_visible_lights_filters_correctly():
+    """Scene.visible_lights returns only lights with visible=True."""
+    from scene import Scene
+    scene = Scene()
+    visible  = DiskLight(position=Vec3(0,5,0), normal=Vec3(0,-1,0),
+                         radius=1.0, visible=True)
+    invisible = PointLight(position=Vec3(0,10,0), visible=False)
+    scene.lights = [visible, invisible]
+    assert scene.visible_lights == [visible]
+
+
+def test_scene_visible_lights_empty_when_none_visible():
+    from scene import Scene
+    scene = Scene()
+    scene.lights = [PointLight(position=Vec3(0,10,0))]
+    assert scene.visible_lights == []
