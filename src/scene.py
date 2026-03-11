@@ -71,9 +71,10 @@ class LightBase(ABC):
         ...
 
     @property
+    @abstractmethod
     def position(self) -> Vec3:
         """Center/position used for diffuse direction calculation."""
-        raise NotImplementedError
+        ...
 
 
 # ---------------------------------------------------------------------------
@@ -159,11 +160,12 @@ class DiskLight(LightBase):
 
     def hit(self, ray, t_min: float = 0.001, t_max: float = float('inf')):
         """Return a HitRecord if ray hits the disk face (respects two_sided)."""
+        # Deferred import to avoid circular dependency with shapes
         from shapes.primitives import HitRecord
         denom = ray.direction.dot(self.normal)
-        if not self.two_sided and denom >= 0:
+        if abs(denom) < 1e-8:          # parallel ray — no intersection
             return None
-        if abs(denom) < 1e-8:
+        if not self.two_sided and denom >= 0:   # back face, one-sided
             return None
         t = (self._position - ray.origin).dot(self.normal) / denom
         if t < t_min or t > t_max:
@@ -210,11 +212,12 @@ class RectLight(LightBase):
 
     def hit(self, ray, t_min: float = 0.001, t_max: float = float('inf')):
         """Return a HitRecord if ray hits the parallelogram (respects two_sided)."""
+        # Deferred import to avoid circular dependency with shapes
         from shapes.primitives import HitRecord
         denom = ray.direction.dot(self._normal)
-        if not self.two_sided and denom >= 0:
+        if abs(denom) < 1e-8:          # parallel ray — no intersection
             return None
-        if abs(denom) < 1e-8:
+        if not self.two_sided and denom >= 0:   # back face, one-sided
             return None
         t = (self.corner - ray.origin).dot(self._normal) / denom
         if t < t_min or t > t_max:

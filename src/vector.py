@@ -67,6 +67,8 @@ class Vec3:
                 and abs(self.y - other.y) < 1e-9
                 and abs(self.z - other.z) < 1e-9)
 
+    __hash__ = object.__hash__
+
     def __repr__(self) -> str:
         return f"Vec3({self.x:.4f}, {self.y:.4f}, {self.z:.4f})"
 

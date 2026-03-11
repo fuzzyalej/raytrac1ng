@@ -2,6 +2,7 @@
 import math
 import pytest
 from color import Color
+from ray import Ray
 from scene import LightBase, Light, PointLight, SphereLight, DiskLight, RectLight
 from vector import Vec3
 
@@ -129,7 +130,6 @@ def test_rect_light_position_is_center():
 
 def test_lightbase_cannot_be_instantiated():
     """LightBase is abstract and cannot be instantiated directly."""
-    import pytest
     with pytest.raises(TypeError):
         LightBase()
 
@@ -138,7 +138,6 @@ def test_lightbase_cannot_be_instantiated():
 
 def test_disk_light_hit_front_face():
     """Ray from below hitting the front face of a downward-facing disk."""
-    from ray import Ray
     light = DiskLight(position=Vec3(0, 5, 0), normal=Vec3(0, -1, 0), radius=1.0)
     # Ray from below pointing up
     ray = Ray(Vec3(0, 0, 0), Vec3(0, 1, 0))
@@ -149,7 +148,6 @@ def test_disk_light_hit_front_face():
 
 def test_disk_light_hit_back_face_one_sided_returns_none():
     """One-sided disk: ray hitting the back face returns None."""
-    from ray import Ray
     light = DiskLight(position=Vec3(0, 5, 0), normal=Vec3(0, -1, 0),
                       radius=1.0, two_sided=False)
     # Ray from above hitting the back side of the downward-facing disk
@@ -160,7 +158,6 @@ def test_disk_light_hit_back_face_one_sided_returns_none():
 
 def test_disk_light_hit_back_face_two_sided_returns_hit():
     """Two-sided disk: ray hitting the back face returns a HitRecord."""
-    from ray import Ray
     light = DiskLight(position=Vec3(0, 5, 0), normal=Vec3(0, -1, 0),
                       radius=1.0, two_sided=True)
     ray = Ray(Vec3(0, 10, 0), Vec3(0, -1, 0))
@@ -170,7 +167,6 @@ def test_disk_light_hit_back_face_two_sided_returns_hit():
 
 def test_disk_light_hit_miss_outside_radius():
     """Ray that hits the disk plane but outside the radius returns None."""
-    from ray import Ray
     light = DiskLight(position=Vec3(0, 5, 0), normal=Vec3(0, -1, 0), radius=1.0)
     ray = Ray(Vec3(5, 0, 0), Vec3(0, 1, 0))  # offset far to the side
     hit = light.hit(ray)
@@ -181,7 +177,6 @@ def test_disk_light_hit_miss_outside_radius():
 
 def test_rect_light_hit_front_face():
     """Ray hitting the front face of a rect light."""
-    from ray import Ray
     corner = Vec3(-1, 5, -1)
     edge1  = Vec3(2, 0, 0)
     edge2  = Vec3(0, 0, 2)
@@ -196,7 +191,6 @@ def test_rect_light_hit_front_face():
 
 def test_rect_light_hit_back_face_one_sided_returns_none():
     """One-sided rect: ray from the back returns None."""
-    from ray import Ray
     corner = Vec3(-1, 5, -1)
     edge1  = Vec3(2, 0, 0)
     edge2  = Vec3(0, 0, 2)
@@ -209,7 +203,6 @@ def test_rect_light_hit_back_face_one_sided_returns_none():
 
 def test_rect_light_hit_back_face_two_sided_returns_hit():
     """Two-sided rect: ray from the back returns a HitRecord."""
-    from ray import Ray
     corner = Vec3(-1, 5, -1)
     edge1  = Vec3(2, 0, 0)
     edge2  = Vec3(0, 0, 2)
@@ -221,7 +214,6 @@ def test_rect_light_hit_back_face_two_sided_returns_hit():
 
 def test_rect_light_hit_miss_outside_bounds():
     """Ray that hits the plane but outside the rectangle returns None."""
-    from ray import Ray
     corner = Vec3(-1, 5, -1)
     edge1  = Vec3(2, 0, 0)
     edge2  = Vec3(0, 0, 2)
