@@ -16,7 +16,9 @@ def _light_facing(light, hit_point) -> bool:
         return True
     normal = getattr(light, 'normal', None)
     if normal is None:
-        return True
+        return True  # omnidirectional light (PointLight, SphereLight, Light)
+    # light.position lies on the light's plane for all flat light types,
+    # so this signed-distance test correctly identifies the front face.
     # Front face: hit_point is on the same side as the light's outward normal
     return (hit_point - light.position).dot(normal) > 0.0
 
@@ -34,16 +36,17 @@ def shadow_factor(hit_point, light, ctx) -> float:
 
     n = light.samples
     total = 0.0
+    valid_count = 0
+    bias = 0.001  # move outside loop (minor fix too)
 
     for _ in range(n):
         sample = light.sample_point()
-
         to_light = sample - hit_point
         dist_to_light = to_light.length()
         if dist_to_light < 1e-6:
             continue
+        valid_count += 1
 
-        bias = 0.001
         light_dir = to_light / dist_to_light
         shadow_ray = Ray(hit_point + light_dir * bias, light_dir)
 
@@ -58,7 +61,7 @@ def shadow_factor(hit_point, light, ctx) -> float:
 
         total += light_factor
 
-    return total / n
+    return (total / valid_count) if valid_count > 0 else 1.0
 
 
 def shade(hit: HitRecord, obj_color: Color, ctx) -> Color:
