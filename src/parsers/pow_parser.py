@@ -46,7 +46,7 @@ class SceneLight:
     samples:           int    = 16
     color:             tuple  = (1.0, 1.0, 1.0)
     intensity:         float  = 1.0
-    color_temperature: object = None  # float or None
+    color_temperature: float | None = None
     visible:           bool   = False
 
 
@@ -59,8 +59,8 @@ class SceneDiskLight:
     samples:           int    = 16
     color:             tuple  = (1.0, 1.0, 1.0)
     intensity:         float  = 1.0
-    color_temperature: object = None
-    visible:           bool   = False
+    color_temperature: float | None = None
+    visible:           bool         = False
 
 
 @dataclass
@@ -72,8 +72,8 @@ class SceneRectLight:
     samples:           int    = 16
     color:             tuple  = (1.0, 1.0, 1.0)
     intensity:         float  = 1.0
-    color_temperature: object = None
-    visible:           bool   = False
+    color_temperature: float | None = None
+    visible:           bool         = False
 
 
 _MAT_DEFAULTS = dict(color=(1.0, 1.0, 1.0), opacity=1.0, reflect=0.0, ior=1.0)
@@ -1066,8 +1066,22 @@ class _FunctionParser(_ProgramParser):
 
 
 # ---------------------------------------------------------------------------
-# _build_scene_item helper
+# _build_scene_item helpers
 # ---------------------------------------------------------------------------
+
+def _parse_light_common(props: dict) -> dict:
+    """Extract shared LightBase fields from a parsed props dict."""
+    visible = props.get("visible", False)
+    if not isinstance(visible, bool):
+        raise ParseError(f"'visible' must be true or false, got {visible!r}")
+    return dict(
+        color=props.get("color", (1.0, 1.0, 1.0)),
+        intensity=float(props.get("intensity", 1.0)),
+        color_temperature=(float(props["color_temperature"])
+                           if "color_temperature" in props else None),
+        visible=visible,
+    )
+
 
 def _build_scene_item(kind: str, props: dict, mat: dict, mat_ref_present: bool = False):
     """Convert raw props dict + resolved material into a scene item dataclass."""
@@ -1087,37 +1101,31 @@ def _build_scene_item(kind: str, props: dict, mat: dict, mat_ref_present: bool =
             position=props["position"],
             radius=float(props.get("radius", 0.0)),
             samples=int(props.get("samples", 16)),
-            color=props.get("color", (1.0, 1.0, 1.0)),
-            intensity=float(props.get("intensity", 1.0)),
-            color_temperature=(float(props["color_temperature"])
-                               if "color_temperature" in props else None),
-            visible=bool(props.get("visible", False)),
+            **_parse_light_common(props),
         )
     if kind == "disk_light":
+        two_sided = props.get("two_sided", False)
+        if not isinstance(two_sided, bool):
+            raise ParseError(f"'two_sided' must be true or false, got {two_sided!r}")
         return SceneDiskLight(
             position=props["position"],
             normal=props["normal"],
             radius=float(props["radius"]),
-            two_sided=bool(props.get("two_sided", False)),
+            two_sided=two_sided,
             samples=int(props.get("samples", 16)),
-            color=props.get("color", (1.0, 1.0, 1.0)),
-            intensity=float(props.get("intensity", 1.0)),
-            color_temperature=(float(props["color_temperature"])
-                               if "color_temperature" in props else None),
-            visible=bool(props.get("visible", False)),
+            **_parse_light_common(props),
         )
     if kind == "rect_light":
+        two_sided = props.get("two_sided", False)
+        if not isinstance(two_sided, bool):
+            raise ParseError(f"'two_sided' must be true or false, got {two_sided!r}")
         return SceneRectLight(
             corner=props["corner"],
             edge1=props["edge1"],
             edge2=props["edge2"],
-            two_sided=bool(props.get("two_sided", False)),
+            two_sided=two_sided,
             samples=int(props.get("samples", 16)),
-            color=props.get("color", (1.0, 1.0, 1.0)),
-            intensity=float(props.get("intensity", 1.0)),
-            color_temperature=(float(props["color_temperature"])
-                               if "color_temperature" in props else None),
-            visible=bool(props.get("visible", False)),
+            **_parse_light_common(props),
         )
     if kind == "sphere":
         return SceneSphere(
