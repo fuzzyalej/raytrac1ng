@@ -86,6 +86,7 @@ def test_plane_opacity():
     assert abs(scene.objects[0].material.opacity - 0.25) < 1e-6
 
 def test_light_default_radius_and_samples(tmp_path):
+    from scene import PointLight
     pov = tmp_path / "s.pov"
     pov.write_text("""
 camera { location <0,0,-5> look_at <0,0,0> fov 60 }
@@ -93,8 +94,8 @@ light { position <5,10,-3> }
 """)
     scene = parse_scene(str(pov))
     light = scene.lights[0]
-    assert light.radius == 0.0
-    assert light.samples == 16
+    assert isinstance(light, PointLight)
+    assert light.samples == 1  # PointLight always uses 1 sample
 
 def test_light_custom_radius_and_samples(tmp_path):
     pov = tmp_path / "s.pov"

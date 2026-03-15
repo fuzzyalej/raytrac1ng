@@ -13,7 +13,7 @@ Supported blocks:
 
 import re
 from vector import Vec3
-from scene import Camera, Light, Scene
+from scene import Camera, Light, PointLight, SphereLight, DiskLight, RectLight, Scene
 from shapes import Sphere, Plane, Box, Cylinder, Cone, Torus
 from color import Color, NAMED_COLORS
 from material import Material
@@ -85,6 +85,32 @@ def _parse_color(body: str) -> Color:
     return Color(1.0, 1.0, 1.0)  # default white
 
 
+def _parse_light_common(body: str) -> dict:
+    """Parse shared light params from a block body string."""
+    color = _parse_color(body)
+    try:
+        intensity = _parse_float(body, 'intensity')
+    except ValueError:
+        intensity = 1.0
+    try:
+        color_temperature = _parse_float(body, 'color_temperature')
+    except ValueError:
+        color_temperature = None
+    vis_match = re.search(r'\bvisible\s+(true|false)\b', body, re.IGNORECASE)
+    visible = vis_match.group(1).lower() == 'true' if vis_match else False
+    try:
+        samples = int(_parse_float(body, 'samples'))
+    except ValueError:
+        samples = 16
+    return dict(
+        color=color,
+        intensity=intensity,
+        color_temperature=color_temperature,
+        visible=visible,
+        samples=samples,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -115,11 +141,35 @@ def parse_scene(filepath: str) -> Scene:
                 radius = _parse_float(body, 'radius')
             except ValueError:
                 radius = 0.0
-            try:
-                samples = int(_parse_float(body, 'samples'))
-            except ValueError:
-                samples = 16
-            scene.lights.append(Light(position=position, radius=radius, samples=samples))
+            kwargs = _parse_light_common(body)
+            if radius > 0.0:
+                scene.lights.append(SphereLight(position=position, radius=radius, **kwargs))
+            else:
+                scene.lights.append(PointLight(position=position, **kwargs))
+
+        elif block_type == 'disk_light':
+            position = _parse_vec3_for_key(body, 'position')
+            normal   = _parse_vec3_for_key(body, 'normal')
+            radius   = _parse_float(body, 'radius')
+            ts_match = re.search(r'\btwo_sided\s+(true|false)\b', body, re.IGNORECASE)
+            two_sided = ts_match.group(1).lower() == 'true' if ts_match else False
+            kwargs = _parse_light_common(body)
+            scene.lights.append(DiskLight(
+                position=position, normal=normal, radius=radius,
+                two_sided=two_sided, **kwargs,
+            ))
+
+        elif block_type == 'rect_light':
+            corner = _parse_vec3_for_key(body, 'corner')
+            edge1  = _parse_vec3_for_key(body, 'edge1')
+            edge2  = _parse_vec3_for_key(body, 'edge2')
+            ts_match = re.search(r'\btwo_sided\s+(true|false)\b', body, re.IGNORECASE)
+            two_sided = ts_match.group(1).lower() == 'true' if ts_match else False
+            kwargs = _parse_light_common(body)
+            scene.lights.append(RectLight(
+                corner=corner, edge1=edge1, edge2=edge2,
+                two_sided=two_sided, **kwargs,
+            ))
 
         elif block_type == 'sphere':
             center = _parse_vec3_for_key(body, 'center')
