@@ -6,6 +6,10 @@ import sys, os, tempfile, textwrap
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pytest
+from parsers.pow_parser import parse_source, SceneLight, SceneDiskLight, SceneRectLight
+from parsers.pow_adapter import build_scene
+from scene import DiskLight, RectLight, PointLight, SphereLight
+from color import Color
 
 MINIMAL_SCENE = textwrap.dedent("""\
     camera {
@@ -99,8 +103,6 @@ def test_old_pov_still_works():
 
 # ---- New light type parser tests ----
 
-from parsers.pow_parser import parse_source, SceneLight, SceneDiskLight, SceneRectLight
-
 
 def test_pow_light_new_params():
     src = """
@@ -189,8 +191,6 @@ light { position (0, 10, 0) }
 
 # ---- Adapter integration tests ----
 
-from parsers.pow_adapter import build_scene
-
 
 def test_adapter_disk_light_builds_scene():
     src = """
@@ -206,8 +206,6 @@ disk_light {
   samples 16
 }
 """
-    from scene import DiskLight
-    from color import Color
     scene = build_scene(src, base_path=".")
     assert len(scene.lights) == 1
     light = scene.lights[0]
@@ -228,7 +226,6 @@ rect_light {
   two_sided true
 }
 """
-    from scene import RectLight
     scene = build_scene(src, base_path=".")
     assert len(scene.lights) == 1
     light = scene.lights[0]
@@ -241,7 +238,6 @@ def test_adapter_legacy_light_point_maps_to_point_light():
 camera { location (0,0,-5)  look_at (0,0,0) }
 light { position (0, 10, 0) }
 """
-    from scene import PointLight
     scene = build_scene(src, base_path=".")
     assert isinstance(scene.lights[0], PointLight)
 
@@ -251,7 +247,6 @@ def test_adapter_legacy_light_sphere_maps_to_sphere_light():
 camera { location (0,0,-5)  look_at (0,0,0) }
 light { position (0, 10, 0)  radius 2.0 }
 """
-    from scene import SphereLight
     scene = build_scene(src, base_path=".")
     assert isinstance(scene.lights[0], SphereLight)
     assert scene.lights[0].radius == pytest.approx(2.0)

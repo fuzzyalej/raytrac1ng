@@ -198,5 +198,5 @@ def parse_scene(path: str) -> Scene:
 
 def build_scene(source: str, base_path: str = ".") -> Scene:
     """Parse POW source text and return a Scene."""
-    items = parse_source(source)
+    items = parse_source(source, base_path=base_path)
     return _build_from_items(items, base_path)
