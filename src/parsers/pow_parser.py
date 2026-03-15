@@ -36,14 +36,44 @@ BUILTINS: dict = {
 class SceneCamera:
     location: tuple
     look_at:  tuple
-    fov:      float
+    fov:      float = 60.0
 
 
 @dataclass
 class SceneLight:
-    position: tuple
-    radius:   float = 0.0
-    samples:  int   = 16
+    position:          tuple
+    radius:            float  = 0.0
+    samples:           int    = 16
+    color:             tuple  = (1.0, 1.0, 1.0)
+    intensity:         float  = 1.0
+    color_temperature: object = None  # float or None
+    visible:           bool   = False
+
+
+@dataclass
+class SceneDiskLight:
+    position:          tuple
+    normal:            tuple
+    radius:            float
+    two_sided:         bool   = False
+    samples:           int    = 16
+    color:             tuple  = (1.0, 1.0, 1.0)
+    intensity:         float  = 1.0
+    color_temperature: object = None
+    visible:           bool   = False
+
+
+@dataclass
+class SceneRectLight:
+    corner:            tuple
+    edge1:             tuple
+    edge2:             tuple
+    two_sided:         bool   = False
+    samples:           int    = 16
+    color:             tuple  = (1.0, 1.0, 1.0)
+    intensity:         float  = 1.0
+    color_temperature: object = None
+    visible:           bool   = False
 
 
 _MAT_DEFAULTS = dict(color=(1.0, 1.0, 1.0), opacity=1.0, reflect=0.0, ior=1.0)
@@ -352,6 +382,14 @@ class Parser:
                 self._expect(TT.RPAREN)
                 return first
 
+        # Boolean literals
+        if tok.type == TT.IDENT and tok.value == "true":
+            self._advance()
+            return True
+        if tok.type == TT.IDENT and tok.value == "false":
+            self._advance()
+            return False
+
         # Identifier: variable reference or function call
         if tok.type == TT.IDENT:
             self._advance()
@@ -408,7 +446,7 @@ class Parser:
 # ---------------------------------------------------------------------------
 
 _BLOCK_KEYWORDS = {
-    "camera", "light",
+    "camera", "light", "disk_light", "rect_light",
     "sphere", "plane", "box", "cylinder", "cone", "torus",
     "union", "intersection", "difference",
     "mesh",
@@ -697,7 +735,7 @@ class _ProgramParser(Parser):
                 if not isinstance(mat_ref, dict):
                     raise ParseError(f"{mat_name!r} is not a material")
             elif key == "transform":
-                if kind in ("camera", "light"):
+                if kind in ("camera", "light", "disk_light", "rect_light"):
                     raise ParseError(f"'transform' is not supported on {kind!r} blocks")
                 name_tok = self._expect(TT.IDENT)
                 t_name = name_tok.value
@@ -1042,13 +1080,44 @@ def _build_scene_item(kind: str, props: dict, mat: dict, mat_ref_present: bool =
         return SceneCamera(
             location=props["location"],
             look_at=props["look_at"],
-            fov=float(props["fov"]),
+            fov=float(props.get("fov", 60.0)),
         )
     if kind == "light":
         return SceneLight(
             position=props["position"],
             radius=float(props.get("radius", 0.0)),
             samples=int(props.get("samples", 16)),
+            color=props.get("color", (1.0, 1.0, 1.0)),
+            intensity=float(props.get("intensity", 1.0)),
+            color_temperature=(float(props["color_temperature"])
+                               if "color_temperature" in props else None),
+            visible=bool(props.get("visible", False)),
+        )
+    if kind == "disk_light":
+        return SceneDiskLight(
+            position=props["position"],
+            normal=props["normal"],
+            radius=float(props["radius"]),
+            two_sided=bool(props.get("two_sided", False)),
+            samples=int(props.get("samples", 16)),
+            color=props.get("color", (1.0, 1.0, 1.0)),
+            intensity=float(props.get("intensity", 1.0)),
+            color_temperature=(float(props["color_temperature"])
+                               if "color_temperature" in props else None),
+            visible=bool(props.get("visible", False)),
+        )
+    if kind == "rect_light":
+        return SceneRectLight(
+            corner=props["corner"],
+            edge1=props["edge1"],
+            edge2=props["edge2"],
+            two_sided=bool(props.get("two_sided", False)),
+            samples=int(props.get("samples", 16)),
+            color=props.get("color", (1.0, 1.0, 1.0)),
+            intensity=float(props.get("intensity", 1.0)),
+            color_temperature=(float(props["color_temperature"])
+                               if "color_temperature" in props else None),
+            visible=bool(props.get("visible", False)),
         )
     if kind == "sphere":
         return SceneSphere(
@@ -1102,6 +1171,7 @@ def _build_scene_item(kind: str, props: dict, mat: dict, mat_ref_present: bool =
             # so they are always applied as overrides (defaulting to 0.0 / 1.0).
             reflect=float(mat["reflect"]),
             ior=float(mat["ior"]),
+            transform=props.get("transform"),
         )
     raise ParseError(f"unknown block type {kind!r}")
 
