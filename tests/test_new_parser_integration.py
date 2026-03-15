@@ -185,3 +185,82 @@ light { position (0, 10, 0) }
     assert L.color_temperature is None
     assert L.visible is False
     assert L.samples == 16
+
+
+# ---- Adapter integration tests ----
+
+from parsers.pow_adapter import build_scene
+
+
+def test_adapter_disk_light_builds_scene():
+    src = """
+camera { location (0,0,-5)  look_at (0,0,0) }
+disk_light {
+  position (0, 5, 0)
+  normal (0, -1, 0)
+  radius 1.5
+  color (1.0, 0.8, 0.0)
+  intensity 2.0
+  color_temperature 3000
+  visible true
+  samples 16
+}
+"""
+    from scene import DiskLight
+    from color import Color
+    scene = build_scene(src, base_path=".")
+    assert len(scene.lights) == 1
+    light = scene.lights[0]
+    assert isinstance(light, DiskLight)
+    assert light.radius == pytest.approx(1.5)
+    assert light.visible is True
+    assert light.color_temperature == pytest.approx(3000.0)
+    assert light.intensity == pytest.approx(2.0)
+
+
+def test_adapter_rect_light_builds_scene():
+    src = """
+camera { location (0,0,-5)  look_at (0,0,0) }
+rect_light {
+  corner (0, 5, 0)
+  edge1  (2, 0, 0)
+  edge2  (0, 0, 2)
+  two_sided true
+}
+"""
+    from scene import RectLight
+    scene = build_scene(src, base_path=".")
+    assert len(scene.lights) == 1
+    light = scene.lights[0]
+    assert isinstance(light, RectLight)
+    assert light.two_sided is True
+
+
+def test_adapter_legacy_light_point_maps_to_point_light():
+    src = """
+camera { location (0,0,-5)  look_at (0,0,0) }
+light { position (0, 10, 0) }
+"""
+    from scene import PointLight
+    scene = build_scene(src, base_path=".")
+    assert isinstance(scene.lights[0], PointLight)
+
+
+def test_adapter_legacy_light_sphere_maps_to_sphere_light():
+    src = """
+camera { location (0,0,-5)  look_at (0,0,0) }
+light { position (0, 10, 0)  radius 2.0 }
+"""
+    from scene import SphereLight
+    scene = build_scene(src, base_path=".")
+    assert isinstance(scene.lights[0], SphereLight)
+    assert scene.lights[0].radius == pytest.approx(2.0)
+
+
+def test_adapter_light_color_temperature_applied():
+    src = """
+camera { location (0,0,-5)  look_at (0,0,0) }
+light { position (0, 10, 0)  color_temperature 2700 }
+"""
+    scene = build_scene(src, base_path=".")
+    assert scene.lights[0].color_temperature == pytest.approx(2700.0)

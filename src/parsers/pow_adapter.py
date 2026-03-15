@@ -6,14 +6,14 @@ from pathlib import Path
 
 from .pow_parser import (
     parse_source,
-    SceneCamera, SceneLight,
+    SceneCamera, SceneLight, SceneDiskLight, SceneRectLight,
     SceneSphere, ScenePlane, SceneBox,
     SceneCylinder, SceneCone, SceneTorus,
     SceneCSGUnion, SceneCSGIntersection, SceneCSGDifference,
     SceneMesh,
     SceneTransform,          # NEW
 )
-from scene import Scene, Camera, Light
+from scene import Scene, Camera, Light, PointLight, SphereLight, DiskLight, RectLight
 from shapes import Sphere, Plane, Box, Cylinder, Cone, Torus
 from shapes import CSGUnion, CSGIntersection, CSGDifference
 from shapes import Transform, TransformedShape  # NEW
@@ -36,6 +36,17 @@ def _make_transform(st: SceneTransform) -> Transform:
     return Transform(scale=st.scale, rotate=st.rotate, translate=st.translate)
 
 
+def _light_kwargs(item) -> dict:
+    """Extract shared LightBase kwargs from a scene light dataclass."""
+    return dict(
+        color=_c(item.color),
+        intensity=item.intensity,
+        color_temperature=item.color_temperature,
+        visible=item.visible,
+        samples=item.samples,
+    )
+
+
 def _maybe_wrap(shape, item):
     """Wrap shape in TransformedShape if the scene item carries a transform."""
     tf = getattr(item, 'transform', None)
@@ -44,7 +55,7 @@ def _maybe_wrap(shape, item):
     return shape
 
 
-def _build_shape(item):
+def _build_shape(item, base_path: str = "."):
     """Recursively convert a scene item dataclass to a shape object."""
     if isinstance(item, SceneSphere):
         mat = Material(color=_c(item.color), opacity=item.opacity,
@@ -77,7 +88,7 @@ def _build_shape(item):
                       material=mat)
         return _maybe_wrap(shape, item)
     if isinstance(item, SceneCSGUnion):
-        children = [_build_shape(c) for c in item.children]
+        children = [_build_shape(c, base_path) for c in item.children]
         # Each child may already be a TransformedShape (child-level transform);
         # the union's own transform (if any) wraps the entire node on top.
         # This hierarchical composition is intentional — transforms apply independently.
@@ -86,7 +97,7 @@ def _build_shape(item):
                          opacity=item.opacity, reflect=item.reflect, ior=item.ior)
         return _maybe_wrap(shape, item)
     if isinstance(item, SceneCSGIntersection):
-        children = [_build_shape(c) for c in item.children]
+        children = [_build_shape(c, base_path) for c in item.children]
         # Each child may already be a TransformedShape (child-level transform);
         # the union's own transform (if any) wraps the entire node on top.
         # This hierarchical composition is intentional — transforms apply independently.
@@ -98,19 +109,25 @@ def _build_shape(item):
         # Each child may already be a TransformedShape (child-level transform);
         # the union's own transform (if any) wraps the entire node on top.
         # This hierarchical composition is intentional — transforms apply independently.
-        shape = CSGDifference(_build_shape(item.left), _build_shape(item.right),
+        shape = CSGDifference(_build_shape(item.left, base_path), _build_shape(item.right, base_path),
                               color=_c(item.color) if item.color else None,
                               opacity=item.opacity, reflect=item.reflect, ior=item.ior)
         return _maybe_wrap(shape, item)
+    if isinstance(item, SceneMesh):
+        resolved = os.path.join(base_path, item.file)
+        mesh = load_obj(
+            resolved,
+            color=_c(item.color) if item.color is not None else None,
+            opacity=item.opacity,
+            reflect=item.reflect,
+            ior=item.ior,
+        )
+        return _maybe_wrap(mesh, item)
     raise ValueError(f"unknown scene item type: {type(item)}")
 
 
-def parse_scene(path: str) -> Scene:
-    with open(path) as fh:
-        src = fh.read()
-    base_path = str(Path(path).parent)
-    items = parse_source(src, base_path=base_path)
-
+def _build_from_items(items, base_path: str = ".") -> Scene:
+    """Iterate parsed scene items and populate a Scene object."""
     scene = Scene()
 
     for item in items:
@@ -122,10 +139,35 @@ def parse_scene(path: str) -> Scene:
             )
 
         elif isinstance(item, SceneLight):
-            scene.lights.append(Light(
+            kwargs = _light_kwargs(item)
+            if item.radius > 0.0:
+                scene.lights.append(SphereLight(
+                    position=_v(item.position),
+                    radius=item.radius,
+                    **kwargs,
+                ))
+            else:
+                scene.lights.append(PointLight(
+                    position=_v(item.position),
+                    **kwargs,
+                ))
+
+        elif isinstance(item, SceneDiskLight):
+            scene.lights.append(DiskLight(
                 position=_v(item.position),
+                normal=_v(item.normal),
                 radius=item.radius,
-                samples=item.samples,
+                two_sided=item.two_sided,
+                **_light_kwargs(item),
+            ))
+
+        elif isinstance(item, SceneRectLight):
+            scene.lights.append(RectLight(
+                corner=_v(item.corner),
+                edge1=_v(item.edge1),
+                edge2=_v(item.edge2),
+                two_sided=item.two_sided,
+                **_light_kwargs(item),
             ))
 
         elif isinstance(item, ScenePlane):
@@ -138,22 +180,23 @@ def parse_scene(path: str) -> Scene:
             )
             scene.objects.append(_maybe_wrap(shape, item))
 
-        elif isinstance(item, SceneMesh):
-            resolved = os.path.join(base_path, item.file)
-            mesh = load_obj(
-                resolved,
-                color=_c(item.color) if item.color is not None else None,
-                opacity=item.opacity,
-                reflect=item.reflect,
-                ior=item.ior,
-            )
-            scene.objects.append(_maybe_wrap(mesh, item))
-
         else:
-            # All bounded shapes (primitives and CSG) go through _build_shape
-            try:
-                scene.objects.append(_build_shape(item))
-            except ValueError as exc:
-                raise RuntimeError(f"unrecognised scene item: {type(item)}") from exc
+            # All other types (Sphere, Box, Cylinder, CSG, Mesh, etc.)
+            # are shapes and should be built via _build_shape.
+            scene.objects.append(_build_shape(item, base_path))
 
     return scene
+
+
+def parse_scene(path: str) -> Scene:
+    with open(path) as fh:
+        src = fh.read()
+    base_path = str(Path(path).parent)
+    items = parse_source(src, base_path=base_path)
+    return _build_from_items(items, base_path)
+
+
+def build_scene(source: str, base_path: str = ".") -> Scene:
+    """Parse POW source text and return a Scene."""
+    items = parse_source(source)
+    return _build_from_items(items, base_path)
