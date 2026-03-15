@@ -74,6 +74,13 @@ def _trace(ray, ctx, depth: int) -> Color:
     """
     hit, obj = _find_hit(ray, ctx)
 
+    # Check visible lights — if one is hit closer than any object, return its emission
+    for light in ctx.scene.visible_lights:
+        light_hit = light.hit(ray, t_min=0.001,
+                              t_max=hit.t if hit is not None else float('inf'))
+        if light_hit is not None:
+            return light.effective_color()
+
     if hit is None:
         return BG_COLOR
 

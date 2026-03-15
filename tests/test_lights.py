@@ -337,3 +337,108 @@ def test_shade_warm_light_tints_surface():
     result = shade(hit, Color(1.0, 1.0, 1.0), ctx)
     # Warm light: result should have r > b
     assert result.r > result.b
+
+
+# ---- Renderer visible light tests ----
+
+def test_visible_disk_light_appears_in_render():
+    """A visible DiskLight facing the camera produces a bright colored pixel at center."""
+    from scene import Scene, Camera, DiskLight
+    from rendering import render
+    scene = Scene()
+    scene.camera = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0), fov=60)
+    scene.lights = [
+        DiskLight(
+            position=Vec3(0, 0, 2),
+            normal=Vec3(0, 0, -1),   # facing the camera
+            radius=0.5,
+            visible=True,
+            color=Color(1.0, 1.0, 0.0),  # yellow
+            intensity=1.0,
+        )
+    ]
+    scene.objects = []
+    pixels = render(scene, 20, 20)
+    center = pixels[10 * 20 + 10]
+    # Should be close to yellow (r≈1, g≈1, b≈0)
+    assert center.r > 0.8
+    assert center.g > 0.8
+    assert center.b < 0.2
+
+
+def test_invisible_disk_light_does_not_appear_in_render():
+    """A DiskLight with visible=False should not produce visible geometry."""
+    from scene import Scene, Camera, DiskLight
+    from rendering import render
+    from rendering.renderer import BG_COLOR
+    scene = Scene()
+    scene.camera = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0), fov=60)
+    scene.lights = [
+        DiskLight(
+            position=Vec3(0, 0, 2),
+            normal=Vec3(0, 0, -1),
+            radius=0.5,
+            visible=False,
+            color=Color(1.0, 1.0, 0.0),
+        )
+    ]
+    scene.objects = []
+    pixels = render(scene, 20, 20)
+    center = pixels[10 * 20 + 10]
+    assert center.r == pytest.approx(BG_COLOR.r, abs=0.05)
+    assert center.g == pytest.approx(BG_COLOR.g, abs=0.05)
+    assert center.b == pytest.approx(BG_COLOR.b, abs=0.05)
+
+
+def test_visible_rect_light_appears_in_render():
+    """A visible RectLight facing the camera produces a bright pixel."""
+    from scene import Scene, Camera, RectLight
+    from rendering import render
+    scene = Scene()
+    scene.camera = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0), fov=60)
+    # Rect in the XY plane at z=2, facing camera (-Z normal)
+    # normal = cross(edge1, edge2) = cross((1,0,0),(0,1,0)) = (0,0,1) — faces away from camera
+    # So use edge1=(1,0,0), edge2=(0,-1,0) to get normal=(0,0,-1) facing camera
+    scene.lights = [
+        RectLight(
+            corner=Vec3(-0.5, 0.5, 2),
+            edge1=Vec3(1, 0, 0),
+            edge2=Vec3(0, -1, 0),
+            visible=True,
+            color=Color(0.0, 1.0, 1.0),  # cyan
+        )
+    ]
+    scene.objects = []
+    pixels = render(scene, 20, 20)
+    center = pixels[10 * 20 + 10]
+    # Should be close to cyan (r≈0, g≈1, b≈1)
+    assert center.r < 0.2
+    assert center.g > 0.8
+    assert center.b > 0.8
+
+
+def test_visible_light_does_not_block_shadows():
+    """A visible light should not cast shadows on other objects."""
+    from scene import Scene, Camera, DiskLight, PointLight
+    from shapes import Sphere, Plane
+    from material import Material
+    from rendering import render
+    # Point light above, visible disk in front of a sphere — disk should not shadow the sphere
+    scene = Scene()
+    scene.camera = Camera(Vec3(0, 2, -5), Vec3(0, 0, 0), fov=60)
+    scene.lights = [
+        PointLight(position=Vec3(0, 10, 0)),
+        DiskLight(
+            position=Vec3(0, 1, 0), normal=Vec3(0, -1, 0),
+            radius=0.3, visible=True,
+        ),
+    ]
+    scene.objects = [
+        Plane(Vec3(0, 1, 0), -1.0, material=Material()),
+    ]
+    # If disk doesn't block shadows, the plane under it should still be lit
+    pixels = render(scene, 30, 30)
+    # Center-bottom pixel should not be fully dark
+    bottom = pixels[25 * 30 + 15]
+    total = bottom.r + bottom.g + bottom.b
+    assert total > 0.1
