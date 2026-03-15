@@ -442,3 +442,40 @@ def test_visible_light_does_not_block_shadows():
     bottom = pixels[25 * 30 + 15]
     total = bottom.r + bottom.g + bottom.b
     assert total > 0.1
+
+
+def test_point_light_visible_true_does_not_crash():
+    """PointLight with visible=True should not crash — it just isn't hittable."""
+    from scene import Scene, Camera, PointLight
+    from rendering import render
+    scene = Scene()
+    scene.camera = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0), fov=60)
+    scene.lights = [PointLight(position=Vec3(0, 0, 2), visible=True)]
+    scene.objects = []
+    # Should render without AttributeError — PointLight.hit() returns None
+    pixels = render(scene, 5, 5)
+    assert len(pixels) == 25
+
+
+def test_two_visible_disk_lights_closest_wins():
+    """With two overlapping visible DiskLights, the closer one's color is returned."""
+    from scene import Scene, Camera, DiskLight
+    from rendering import render
+    scene = Scene()
+    scene.camera = Camera(Vec3(0, 0, -5), Vec3(0, 0, 0), fov=60)
+    scene.lights = [
+        # Far light (z=3, yellow) — added first in list
+        DiskLight(position=Vec3(0, 0, 3), normal=Vec3(0, 0, -1),
+                  radius=0.5, visible=True, color=Color(1.0, 1.0, 0.0)),
+        # Near light (z=1, red) — added second in list, but closer
+        DiskLight(position=Vec3(0, 0, 1), normal=Vec3(0, 0, -1),
+                  radius=0.5, visible=True, color=Color(1.0, 0.0, 0.0)),
+    ]
+    scene.objects = []
+    pixels = render(scene, 20, 20)
+    center = pixels[10 * 20 + 10]
+    # Near (red) light should win over far (yellow) light
+    assert center.r > 0.8       # red channel high
+    assert center.b < 0.1       # blue channel low
+    # Red dominates over yellow: g should be low compared to r
+    assert center.r > center.g

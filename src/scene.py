@@ -65,6 +65,10 @@ class LightBase(ABC):
                 else Color(1.0, 1.0, 1.0))
         return (base * self.color * self.intensity).clamp()
 
+    def hit(self, ray, t_min: float = 0.001, t_max: float = float('inf')):
+        """Default: not hittable by primary rays. Subclasses override when visible."""
+        return None
+
     @abstractmethod
     def sample_point(self) -> Vec3:
         """Return a random point on (or inside) the light surface."""
