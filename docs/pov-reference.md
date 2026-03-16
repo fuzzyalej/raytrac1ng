@@ -81,14 +81,25 @@ camera {
 
 ```
 light {
-  position <x, y, z>    // light position in world space
-  radius   N            // sphere radius for area light (default: 0 = point light)
-  samples  N            // shadow rays per area light sample (default: 16)
+  position          <x, y, z>    // light position in world space
+  radius            N            // sphere radius for area light (default: 0 = point light)
+  samples           N            // shadow rays per sample (default: 16)
+  color             <r, g, b>    // light tint in [0.0, 1.0] (default: white)
+  intensity         N            // brightness multiplier (default: 1.0)
+  color_temperature N            // Kelvin (1000–40000); if set, multiplied with color
+  visible           N            // 1 = glowing geometry, 0 = invisible (default: 0)
 }
 ```
 
 `radius 0` (default) produces hard shadows from a point light using a single shadow ray.
 `radius > 0` produces soft penumbra shadows using `samples` rays fired to random points on the light sphere.
+
+`color_temperature` overrides the white default with a physically-based black-body color (Tanner Helland
+approximation). Typical values: `2700` (warm incandescent), `4000` (neutral white), `6500` (daylight),
+`10000` (blue sky / moonlight).
+
+When `visible 1`, primary rays that hit the light geometry return `effective_color` directly — the sphere
+appears as a glowing bulb.
 
 **Examples:**
 
@@ -98,11 +109,103 @@ light {
   position <5, 10, -3>
 }
 
-// Area light — soft shadows
+// Warm incandescent bulb — visible sphere area light
 light {
-  position <4, 8, -4>
-  radius   1.5
-  samples  32
+  position          <0, 4, 0>
+  radius            0.3
+  samples           32
+  color_temperature 2700
+  intensity         3.0
+  visible           1
+}
+
+// Cool moonlight — hard shadows, slight blue tint
+light {
+  position          <20, 40, -10>
+  color_temperature 10000
+  intensity         0.8
+}
+```
+
+---
+
+### disk_light
+
+Flat circular area light. Emits from the side facing `normal` only (one-sided by default).
+
+```
+disk_light {
+  position          <x, y, z>    // center of the disk
+  normal            <x, y, z>    // direction the disk faces (will be normalized)
+  radius            N            // disk radius
+  samples           N            // shadow rays per sample (default: 16)
+  two_sided         N            // 1 = emit from both faces (default: 0)
+  color             <r, g, b>    // light tint (default: white)
+  intensity         N            // brightness multiplier (default: 1.0)
+  color_temperature N            // Kelvin — see light section above
+  visible           N            // 1 = visible disk geometry (default: 0)
+}
+```
+
+**Examples:**
+
+```
+// Overhead studio key light — neutral white disk
+disk_light {
+  position  <0, 5, 0>
+  normal    <0, -1, 0>
+  radius    1.5
+  samples   32
+  intensity 2.0
+}
+
+// Visible moon disk (cool blue, facing camera)
+disk_light {
+  position          <0, 8, 10>
+  normal            <0, -0.3, -1>
+  radius            1.0
+  samples           16
+  color_temperature 10000
+  intensity         1.5
+  visible           1
+}
+```
+
+---
+
+### rect_light
+
+Parallelogram area light defined by a corner and two edge vectors.
+
+```
+rect_light {
+  corner            <x, y, z>    // one corner of the rectangle
+  edge1             <x, y, z>    // first edge direction and length
+  edge2             <x, y, z>    // second edge direction and length
+  samples           N            // shadow rays per sample (default: 16)
+  two_sided         N            // 1 = emit from both faces (default: 0)
+  color             <r, g, b>    // light tint (default: white)
+  intensity         N            // brightness multiplier (default: 1.0)
+  color_temperature N            // Kelvin — see light section above
+  visible           N            // 1 = visible rectangle geometry (default: 0)
+}
+```
+
+The light plane normal is `cross(edge1, edge2).normalize()`. The light emits from the side the normal points
+toward (or both sides when `two_sided 1`).
+
+**Examples:**
+
+```
+// Ceiling panel — neutral cool-white, 4×2 rectangle
+rect_light {
+  corner    <-2, 4.9, -1>
+  edge1     <4,  0,    0>
+  edge2     <0,  0,    2>
+  samples   24
+  color_temperature 4000
+  intensity 2.5
+  visible   1
 }
 ```
 

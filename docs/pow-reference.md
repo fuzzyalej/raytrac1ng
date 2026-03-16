@@ -202,13 +202,106 @@ camera {
 
 ```
 light {
-  position (x, y, z)    // light position in world space
-  radius   N            // sphere radius for area light (default: 0 = point light)
-  samples  N            // shadow rays per area light sample (default: 16)
+  position          (x, y, z)    // light position in world space
+  radius            N            // sphere radius for area light (default: 0 = point light)
+  samples           N            // shadow rays per sample (default: 16)
+  color             (r, g, b)    // light tint in [0.0, 1.0] (default: white)
+  intensity         N            // brightness multiplier (default: 1.0)
+  color_temperature N            // Kelvin (1000–40000); if set, multiplied with color
+  visible           true|false   // true = glowing geometry, false = invisible (default)
 }
 ```
 
 `radius 0` gives hard shadows (point light). `radius > 0` gives soft penumbra shadows.
+
+`color_temperature` overrides the white default with a physically-based black-body color (Tanner Helland
+approximation). Typical values: `2700` (warm incandescent), `4000` (neutral white), `6500` (daylight),
+`10000` (blue sky / moonlight).
+
+When `visible true`, primary rays that hit the light sphere return `effective_color` directly — the sphere
+appears as a glowing bulb in the render.
+
+```
+// Warm visible light bulb
+let bulb_pos = (0, 3, 0)
+light {
+  position          bulb_pos
+  radius            0.25
+  samples           32
+  color_temperature 2700
+  intensity         4.0
+  visible           true
+}
+```
+
+### disk_light
+
+Flat circular area light. Emits from the side facing `normal` only (one-sided by default).
+
+```
+disk_light {
+  position          (x, y, z)    // center of the disk
+  normal            (x, y, z)    // direction the disk faces (will be normalized)
+  radius            N            // disk radius
+  samples           N            // shadow rays per sample (default: 16)
+  two_sided         true|false   // true = emit from both faces (default: false)
+  color             (r, g, b)    // light tint (default: white)
+  intensity         N            // brightness multiplier (default: 1.0)
+  color_temperature N            // Kelvin — see light section above
+  visible           true|false   // true = visible disk geometry (default: false)
+}
+```
+
+```
+// Moonlight — visible, cool blue disk
+let moon_dist = 12.0
+disk_light {
+  position          (0, moon_dist, moon_dist)
+  normal            (0, -1, -1)
+  radius            1.2
+  samples           16
+  color_temperature 10000
+  intensity         1.5
+  visible           true
+}
+```
+
+### rect_light
+
+Parallelogram area light defined by a corner and two edge vectors.
+
+```
+rect_light {
+  corner            (x, y, z)    // one corner of the rectangle
+  edge1             (x, y, z)    // first edge direction and length
+  edge2             (x, y, z)    // second edge direction and length
+  samples           N            // shadow rays per sample (default: 16)
+  two_sided         true|false   // true = emit from both faces (default: false)
+  color             (r, g, b)    // light tint (default: white)
+  intensity         N            // brightness multiplier (default: 1.0)
+  color_temperature N            // Kelvin — see light section above
+  visible           true|false   // true = visible rectangle geometry (default: false)
+}
+```
+
+The light plane normal is `cross(edge1, edge2).normalize()`. The light emits from the side the normal points
+toward (or both sides when `two_sided true`).
+
+```
+// Ceiling panel — visible, 4×2 neutral-white rectangle
+let panel_y  = 4.9
+let panel_w  = 4.0
+let panel_d  = 2.0
+rect_light {
+  corner            (-panel_w / 2, panel_y, -panel_d / 2)
+  edge1             (panel_w, 0, 0)
+  edge2             (0,       0, panel_d)
+  samples           24
+  color_temperature 4000
+  intensity         2.5
+  visible           true
+}
+```
 
 ### sphere
 

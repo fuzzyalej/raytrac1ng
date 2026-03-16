@@ -1,7 +1,7 @@
 # Raytrac1ng - A small AI experiment
 
-**Version:** v1.3
-**Last updated:** 2026-03-10
+**Version:** v1.4
+**Last updated:** 2026-03-15
 
 ---
 
@@ -9,7 +9,7 @@
 
 A pure-Python raytracer that reads a scene description file and outputs an RGB PNG image. No external raytracing libraries are used — all intersection math and shading is implemented from scratch. The only external dependency is **Pillow** for image output.
 
-Two scene formats are supported: the legacy `.pov` block format and the modern `.pow` scripting language (variables, loops, functions, materials, imports, CSG, transforms). Scenes are accelerated by a SAH-based BVH tree. Supported primitives: sphere, plane, box, cylinder, cone, torus, OBJ mesh, and CSG composites (union, intersection, difference). Rendering features include Lambertian diffuse shading, soft shadows from area lights, per-object opacity, mirror reflections, physically-based refractions (Snell's law + Fresnel), anti-aliasing, and affine transforms (scale, rotate, translate) on any shape or CSG node.
+Two scene formats are supported: the legacy `.pov` block format and the modern `.pow` scripting language (variables, loops, functions, materials, imports, CSG, transforms). Scenes are accelerated by a SAH-based BVH tree. Supported primitives: sphere, plane, box, cylinder, cone, torus, OBJ mesh, and CSG composites (union, intersection, difference). Rendering features include Lambertian diffuse shading, soft shadows from area lights (point, sphere, disk, rect), per-object opacity, mirror reflections, physically-based refractions (Snell's law + Fresnel), anti-aliasing, affine transforms (scale, rotate, translate) on any shape or CSG node, and color-temperature lighting (Kelvin-to-RGB, Tanner Helland approximation).
 
 ---
 
@@ -64,14 +64,18 @@ intensity = ambient + Σ max(0, dot(normal, light_direction)) × shadow_factor
 - **Ambient:** 0.15 (hardcoded) — prevents surfaces facing away from the light from being completely black.
 - **Diffuse:** Lambertian dot product between the surface normal and the direction toward each light. Only computed when the surface faces the light.
 - **Shadow factor:** For each light, one or more shadow rays are fired from the hit point toward the light. Opaque objects block light completely; transparent objects attenuate by `(1 - opacity)`. Multiple transparent blockers multiply their attenuation. Result is in [0.0, 1.0].
-- The result is clamped to [0, 1] and multiplied by the object's color to produce an RGB Color.
+- The result is clamped to [0, 1] and the light's `effective_color` (color × color_temperature × intensity) is multiplied with the object's color to produce an RGB Color.
 
 ### Shadow Model
 
 Shadow computation varies by light type:
 
 - **Point light** (`radius 0`, the default): A single shadow ray is fired to `light.position`. The result is binary — fully lit or fully shadowed (hard shadows).
-- **Area light** (`radius > 0`): `samples` shadow rays are fired to uniformly random points within a sphere of the given radius centred on `light.position`. The shadow factor is the average across all samples. This produces a **soft penumbra** — surfaces near the shadow edge receive partial light.
+- **Sphere area light** (`radius > 0`): `samples` shadow rays are fired to uniformly random points within a sphere of the given radius centred on `light.position`. The shadow factor is the average across all samples. This produces a **soft penumbra** — surfaces near the shadow edge receive partial light.
+- **Disk area light**: `samples` shadow rays fire to random points on the disk face. One-sided by default (only illuminates surfaces facing the disk's normal side); `two_sided` enables both-sides emission.
+- **Rect area light**: `samples` shadow rays fire to random points on the parallelogram surface. Same one-sided semantics as disk.
+
+All flat lights (disk, rect) skip shadow samples that originate on the wrong side of the light, avoiding phantom illumination.
 
 Transparent objects in the shadow path attenuate rather than block light: a 50%-opaque object passes 50% of the light through. Multiple transparent blockers multiply their attenuation factors. Fully opaque blockers cut the factor to zero (with early-exit optimisation).
 
@@ -215,7 +219,8 @@ The foundation of all math in the raytracer.
 
 #### `color.py` — Color
 
-- **`Color`**: Dataclass with `r`, `g`, `b` float components in [0.0, 1.0]. Supports `+`, `*` (scalar), `clamp()`, and `to_bytes()` → `(R, G, B)` int tuple.
+- **`Color`**: Dataclass with `r`, `g`, `b` float components in [0.0, 1.0]. Supports `+`, `*` (scalar or `Color`×`Color` component-wise), `clamp()`, and `to_bytes()` → `(R, G, B)` int tuple.
+- **`color_from_kelvin(k)`**: Converts a color temperature in Kelvin (1000–40000) to a `Color` using Tanner Helland's piecewise approximation.
 - **`NAMED_COLORS`**: Dictionary of 15 preset named colors for use in `.pov` files.
 
 #### `ray.py` — Ray Types
@@ -260,8 +265,13 @@ The foundation of all math in the raytracer.
 #### `scene.py` — Scene Graph
 
 - **`Camera`**: Builds a coordinate frame from `location`/`look_at`/`fov`. Provides `get_vision_ray(px, py, width, height)` to generate a VisionRay for any pixel.
-- **`Light`**: Holds a `position` (Vec3), `radius` (float, default 0.0 = point light), and `samples` (int, default 16). Used for diffuse shading and shadow computation.
-- **`Scene`**: Container dataclass holding a camera, a list of lights, and a list of objects.
+- **`LightBase`** (ABC): Shared base with `color`, `intensity`, `color_temperature`, `visible`, `samples`. Provides `effective_color()` (Kelvin × color × intensity) and a default `hit()` returning `None`. Abstract `sample_point()` and `position` property.
+- **`PointLight`**: Infinitesimal point source; always uses 1 shadow ray.
+- **`SphereLight`**: Spherical area light; rejection-sampling inside the sphere.
+- **`DiskLight`**: Flat circular area light with `normal`, `radius`, `two_sided`; implements `hit()` for visible geometry.
+- **`RectLight`**: Parallelogram area light with `corner`, `edge1`, `edge2`, `two_sided`; implements `hit()` for visible geometry.
+- **`Light`**: Backwards-compatible wrapper (`radius=0` → point, `radius>0` → sphere).
+- **`Scene`**: Container dataclass holding a camera, a list of lights, and a list of objects. `.visible_lights` property returns lights with `visible=True`.
 
 #### `obj_loader.py` — OBJ/MTL Mesh Loader
 
@@ -333,18 +343,29 @@ python3 main.py examples/01-basic.pov -W 1024 -H 768 -o render.png
 ## Limitations
 
 - Pure Python (slow for large images / many shadow samples); parallel rendering via `--jobs N` mitigates this for CPU-bound scenes but incurs pickling overhead
-- Only sphere area lights — no disk or rectangular lights
 
 ---
 
 ## Possible Next Steps
 
-- **Disk and rectangular area lights** — more physically accurate than sphere area lights for studio-style lighting setups (e.g., `disk { position ... normal ... radius ... }`)
-- **GIF animations** - capacity of animating objects through space and output a gif/video
+- **GIF animations** — capacity of animating objects through space and output a gif/video
+- **Textures**
 
 ---
 
 ## Changelog
+
+### v1.4 — Area Lights & Color Temperature (2026-03-15)
+
+- **Light class hierarchy**: `LightBase` ABC → `PointLight`, `SphereLight`, `DiskLight`, `RectLight`; backwards-compat `Light` wrapper unchanged
+- **`DiskLight`**: flat circular area light with `normal`, `radius`, `two_sided`; one-sided by default; supports `visible` rendering
+- **`RectLight`**: parallelogram area light with `corner + edge1 + edge2`; same one-sided / visible semantics
+- **Color temperature** (`color_temperature` field in Kelvin): `color_from_kelvin()` in `color.py` converts any value 1000–40000K to an RGB tint (Tanner Helland approximation); `effective_color()` multiplies kelvin × tint × intensity
+- **Visible lights**: lights with `visible true` appear as glowing geometry; primary rays return `effective_color` when they hit a visible light before any surface
+- **Colored light shading**: diffuse contribution now uses `light.effective_color()` — white lights behave identically to before; colored or warm lights tint the scene
+- **POW parser**: added `disk_light`, `rect_light` blocks; `true`/`false` boolean literals; `color`, `intensity`, `color_temperature`, `visible` on all light types
+- **POV parser**: added `disk_light`, `rect_light` blocks; all new light fields supported
+- Example scene: `examples/18-area-lights.pow`
 
 ### v1.3 — Transform System (2026-03-10)
 

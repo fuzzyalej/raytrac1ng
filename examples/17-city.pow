@@ -1,0 +1,29 @@
+// 16-city.pow — City model rendering
+// Render: python3 main.py examples/16-city.pow -W 800 -H 600 -o city.png
+
+// Bounding box (approx):
+// X: -45115 .. 45549  (width 90k)
+// Y: -316 .. 7254     (height 7.5k)
+// Z: -24610 .. 51610  (depth 76k)
+
+camera { 
+    location (0, 25, -200) 
+    look_at (0, 50, 100) 
+    fov 50 
+}
+
+light { position (1000, 2000, -1000) radius 100 samples 16 }
+
+// Ground plane
+plane { normal (0, 1, 0) offset -3.5 color (0.4, 0.45, 0.5) reflect 0.1 }
+
+let city_xf = transform {
+    scale (0.01, 0.01, 0.01)
+    translate (0, 0, 0)
+}
+
+mesh {
+    file "models/city.obj"
+    color (0.8, 0.8, 0.8)
+    transform city_xf
+}
